@@ -1,0 +1,5 @@
+# Research Project Title
+
+- **Research Question / Hypothesis**: [State the core research question or central hypothesis to be verified in 1-2 sentences]
+- **Proposed Approach / Contribution**: [Describe the core mechanism of the proposed method and its novelty/contribution over prior work]
+- **Primary Technical Stack**: [List primary languages and scientific computing / machine learning frameworks]
