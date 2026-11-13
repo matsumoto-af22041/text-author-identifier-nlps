@@ -15,8 +15,9 @@ import yaml
 
 from src.classifier import CentroidClassifier, KNNClassifier
 from src.dataset import build_chunks, chunk_sentences, inter_work_splits, intra_work_split, load_corpus
-from src.evaluator import ClassifierSpec, aggregate_confusion, evaluate_fold, plot_similarity_distribution
+from src.evaluator import ClassifierSpec, aggregate_results, evaluate_fold, plot_similarity_distribution
 from src.features.base import BaseFeatureExtractor, NotFittedError
+from src.features.char_unigram import CharUnigramExtractor
 from src.similarity import SIMILARITY_FUNCTIONS, cosine_similarity, jaccard_similarity
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -35,19 +36,6 @@ class IdentityExtractor(BaseFeatureExtractor):
     def transform(self, texts: Sequence[str]) -> np.ndarray:
         return np.stack([self.table[t] for t in texts])
 
-
-class CharUnigramExtractor(BaseFeatureExtractor):
-    """Train に出現した文字の相対頻度（実データ検証用のダミー抽出器）．"""
-
-    def fit(self, train_texts: Sequence[str]) -> Self:
-        self.vocab_ = {c: i for i, c in enumerate(sorted(set("".join(train_texts))))}
-        return self
-
-    def transform(self, texts: Sequence[str]) -> np.ndarray:
-        rows = [np.bincount([self.vocab_[c] for c in t if c in self.vocab_], minlength=len(self.vocab_)) for t in texts]
-        # shape: (n, |vocab|)
-        X = np.stack(rows).astype(np.float64)
-        return X / np.maximum(X.sum(axis=1, keepdims=True), 1.0)
 
 
 def check_numerical_sanity(rng: np.random.Generator) -> None:
@@ -161,16 +149,23 @@ def main() -> None:
 
     print("[6] 実データ通し実行（ダミー文字 unigram，L=1000，Intra + LOWO 全 fold）")
     cs = build_chunks(corpus, 1000)
-    specs = [ClassifierSpec("centroid"), ClassifierSpec("knn", k=1), ClassifierSpec("knn", k=5, knn_mode="global")]
+    specs = [
+        ClassifierSpec("centroid"),
+        ClassifierSpec("knn", k=1, knn_mode="per_author"),
+        ClassifierSpec("knn", k=5, knn_mode="global"),
+    ]
     t0 = time.perf_counter()
-    intra_res = evaluate_fold(CharUnigramExtractor, cs, intra_work_split(cs, ratio, seed), "cosine", specs)
-    lowo_res = [r for s in inter_work_splits(cs) for r in evaluate_fold(CharUnigramExtractor, cs, s, "jaccard", specs)]
+    intra_res = evaluate_fold(CharUnigramExtractor, cs, intra_work_split(cs, ratio, seed), ["cosine"], specs)
+    lowo_res = [r for s in inter_work_splits(cs) for r in evaluate_fold(CharUnigramExtractor, cs, s, ["jaccard"], specs)]
     for r in intra_res:
-        print(f"  intra/cosine  {r.method:<8} k={r.k}: acc={r.metrics['accuracy']:.3f} F1={r.metrics['macro_f1']:.3f} "
-              f"MRR={r.mrr:.3f} ΔS={r.sim_stats.delta_s:.4f} ΔS_macro={r.sim_stats.delta_s_macro:.4f}")
+        st = r.sim_stats
+        print(f"  intra/cosine  {r.spec.name:<16}: acc={r.metrics['accuracy']:.3f} F1={r.metrics['macro_f1']:.3f} "
+              f"MRR={r.mrr:.3f} ΔS_macro={st.delta_s_macro:.4f} ΔS_micro={st.delta_s_micro:.4f}")
     for spec in specs:
-        agg = aggregate_confusion([r for r in lowo_res if (r.method, r.k, r.knn_mode) == (spec.method, spec.k, spec.knn_mode if spec.method == "knn" else None)])
-        print(f"  LOWO/jaccard  {spec.method:<8} k={spec.k}: acc={agg['accuracy']:.3f} F1={agg['macro_f1']:.3f}")
+        agg = aggregate_results([r for r in lowo_res if r.spec == spec])
+        assert agg.num_folds == 9 and agg.n_test == len(cs), "LOWO の pooled 統合で全チャンクが 1 回ずつ Test に入ること"
+        print(f"  LOWO/jaccard  {spec.name:<16}: acc={agg.metrics['accuracy']:.3f} F1={agg.metrics['macro_f1']:.3f} "
+              f"MRR={agg.mrr:.3f} ΔS_macro={agg.sim_stats.delta_s_macro:.4f}")
     print(f"  所要時間 {time.perf_counter() - t0:.1f}s")
     out = PROJECT_ROOT / "outputs" / "verify" / "similarity_distribution_intra_cosine.png"
     plot_similarity_distribution(intra_res[0].sim_stats, out)

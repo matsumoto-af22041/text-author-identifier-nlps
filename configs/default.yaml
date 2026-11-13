@@ -63,8 +63,64 @@ similarity:
 classifier:
     methods: [centroid, knn]
     k_values: [1, 3, 5, 10, 20]
-    knn_mode: per_author
+    # 先頭が本採用（per_author），以降は比較用（類似度行列を共有するため追加コストはほぼ無し）
+    knn_modes: [per_author, global]
 
 # 評価
 evaluation:
     similarity_hist_bins: 50
+
+# 特徴量レジストリ
+#   class：モジュールパス.クラス名（BaseFeatureExtractor のサブクラス）
+#   params：コンストラクタ引数（本採用仕様）．キー名は各モジュールの __init__ 引数と一致させること
+#   ablations：--ablation 指定時に 1 引数ずつ差し替えて追加実行する値（本採用値は含めない）
+features:
+    base:
+        description: 文字 unigram 相対頻度（ベースライン）
+        class: src.features.char_unigram.CharUnigramExtractor
+        params: {}
+        ablations: {}
+    A:
+        description: 文字 N-gram・文体統計量（Ticket 2）
+        class: src.features.stylometry_char.StylometryCharExtractor
+        params: {scaling: minmax, max_features: 1000}
+        ablations: {scaling: [none, zscore]}
+    B:
+        description: 品詞 N-gram・機能語（Ticket 3）
+        class: src.features.pos_function.POSFunctionExtractor
+        params: {token_key: surface, max_features: 1500}
+        ablations: {token_key: [lemma]}
+    C:
+        description: 内容語 TF-IDF（Ticket 4）
+        class: src.features.word_tfidf.WordTFIDFExtractor
+        params: {smooth_idf: true, max_features: 2000}
+        ablations: {}
+    D:
+        description: LSI 潜在意味ベクトル（Ticket 5）
+        class: src.features.lsi_embedding.LSIEmbeddingExtractor
+        params: {n_components: 32}
+        ablations: {n_components: [8, 16, 64]}
+
+# 実験条件（scripts/run_experiments.py）
+experiment:
+    # 既定で実行する特徴量（--features で上書き可能）
+    features: [A, B, C, D]
+    splits: [intra, inter]
+    # Jaccard / Dice は O(N_test N_train D) のため実行するチャンク長を限定（L=100 は cosine のみ）
+    restricted_similarities: [jaccard, dice]
+    restricted_chunk_chars: [500, 1000]
+    # アブレーションを実行するチャンク長
+    ablation_chunk_chars: [500]
+    output_dir: outputs
+
+# レポート（scripts/plot_results.py）
+report:
+    # 図表の代表条件（類似度分布・ヒートマップ・チャンク長推移・特徴量比較表）
+    headline:
+        chunk_chars: 500
+        similarity: cosine
+        classifier: knn5_per_author
+    # 最良モデル選択の基準（Inter-work の Pooled 指標，本採用の特徴量設定のみ対象）
+    best_model_metric: macro_f1
+    num_misclassified_examples: 20
+    excerpt_chars: 120
