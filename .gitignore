@@ -1,8 +1,11 @@
-# データディレクトリ（Git 管理対象外，ディレクトリ構造のみ .gitkeep で維持）
+# データディレクトリ・実験出力ディレクトリ（Git 管理対象外）
 data/**
 !data/
 !data/*/
 !data/**/.gitkeep
+outputs/**
+!outputs/
+!outputs/**/.gitkeep
 
 # ============================== Python ==============================
 # Byte-compiled / optimized / DLL files
