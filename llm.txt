@@ -1,5 +1,5 @@
-# Research Project Title
+# 青空文庫の文体・表現類似度に基づく著者識別システム
 
-- **Research Question / Hypothesis**: [State the core research question or central hypothesis to be verified in 1-2 sentences]
-- **Proposed Approach / Contribution**: [Describe the core mechanism of the proposed method and its novelty/contribution over prior work]
-- **Primary Technical Stack**: [List primary languages and scientific computing / machine learning frameworks]
+- **Research Question / Hypothesis**: 文章の意味内容（トピックや固有名詞）に依存する語彙特徴（単語 TF-IDF 等）は未知の作品（作品間分割）において著者識別精度が著しく低下する一方，文字 N-gram・句読点統計・品詞 N-gram・機能語頻度といった文体特徴（Stylometry）に基づく類似度測定は，作品が異なっても同一著者の文章間で高い類似度を示し，頑健な著者推定が可能であるか．また，判定に必要な最小テキスト長（チャンク長）と類似度算出式（コサイン係数・Jaccard 係数・Dice 係数）および推論方式（重心法・k-NN 法）の最適な組み合わせは何か．
+- **Proposed Approach / Contribution**: 配布された青空文庫サンプルコーパスから複数作品を持つ 4 名の作家（夏目漱石・太宰治・寺田寅彦・田山花袋，計 9 作品）を対象とし，文境界を保持した可変長チャンク分割（100 / 500 / 1000 文字）を構築する．外部の類似度計算・分類ライブラリを使用せず，4 種類の観点別特徴量モジュール（A: 表層・文字 N-gram・文体統計，B: 品詞 N-gram・機能語，C: 内容語 TF-IDF，D: 特異値分解 LSI による潜在意味ベクトル）と講義準拠の 3 種類の類似度指標をフルスクラッチ実装し，「同一作品内分割（トピック漏洩あり）」と「作品単位分割（純粋な文体評価）」の比較実験を通じて文体類似度の有効性を実証する．
+- **Primary Technical Stack**: Python 3.13（パッケージ管理：`uv`），NumPy（ベクトル・行列演算および SVD），`fugashi-plus[unidic-lite]`（MeCab ベースの形態素解析・型ヒント付き Python 3.13 対応版，コード上のインポート名は `fugashi`），Matplotlib（評価結果および類似度分布の可視化），PyYAML（実験設定管理）．
