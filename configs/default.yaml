@@ -1,0 +1,48 @@
+# 実験全体の既定設定
+seed: 42
+
+paths:
+    raw_corpus: data/raw/corpus20150426_with_titles.txt
+    processed_corpus: data/processed/authors_corpus.json
+
+# 生コーパスの構造仕様（docs/AozoraCorpus.pdf 準拠：1 行目作品名，2 行目著者名，作品間に空行 1 行，句点改行）
+corpus:
+    # 配布仕様はシフト JIS だが，展開環境により UTF-8 へ変換済みの場合があるため順に厳密検証
+    candidate_encodings: [cp932, utf-8]
+    expected_num_works: 30
+    min_work_chars: 1000
+
+# 対象 4 作家・計 9 作品
+targets:
+    - id: soseki
+      name: 夏目漱石
+      works: [坊っちゃん, こころ, 三四郎]
+    - id: dazai
+      name: 太宰治
+      works: [惜別, 斜陽]
+    - id: terada
+      name: 寺田寅彦
+      works: [映画芸術, 柿の種]
+    - id: tayama
+      name: 田山花袋
+      works: [蒲団, 田舎教師]
+
+# チャンク長 L（目標累積文字数）
+chunking:
+    target_chunk_chars: [100, 500, 1000]
+
+# 新旧仮名遣い検査（歴史的仮名遣いに特有の表記パターンの出現率）
+orthography:
+    per_chars: 10000
+    # 全パターン合計の出現率（per_chars 文字あたり）がこの値を超える作品を旧仮名遣いと判定
+    historical_rate_threshold: 5.0
+    # 対象作品に旧仮名遣い判定が出た場合に処理を停止（Fail-Fast）
+    fail_on_historical: true
+    patterns:
+        wi_we: "[ゐゑヰヱ]"
+        te_wi: "てゐ"
+        syou: "[でま]せう"
+        darau: "だらう"
+        you_old: "やう[なにだで]"
+        sou_old: "さう[なにだで]"
+        verb_fu: "[一-龥]ふ[。、」]"
