@@ -91,7 +91,7 @@ features:
     C:
         description: 内容語 TF-IDF（Ticket 4）
         class: src.features.word_tfidf.WordTFIDFExtractor
-        params: {smooth_idf: true, max_features: 2000}
+        params: {max_features: 2000}
         ablations: {}
     D:
         description: LSI 潜在意味ベクトル（Ticket 5）
