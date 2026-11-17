@@ -4,6 +4,7 @@
     uv run python scripts/run_experiments.py --config configs/default.yaml
     uv run python scripts/run_experiments.py --features A --chunk-chars 500 --ablation
     uv run python scripts/run_experiments.py --features C --exclude-works 坊っちゃん --run-name excl_bocchan_C
+    uv run python scripts/run_experiments.py --features C --splits inter --balance-train-seeds 42 --run-name bal_s42_C
 
 出力（outputs/<run_name>/）：
     run_meta.json          実行時の設定・CLI 引数・git 状態・コーパスハッシュ
@@ -37,7 +38,16 @@ from typing import Any
 import numpy as np
 import yaml
 
-from src.dataset import ChunkSet, Corpus, Split, build_chunks, inter_work_splits, intra_work_split, load_corpus
+from src.dataset import (
+    ChunkSet,
+    Corpus,
+    Split,
+    balance_train_split,
+    build_chunks,
+    inter_work_splits,
+    intra_work_split,
+    load_corpus,
+)
 from src.evaluator import ClassifierSpec, FoldResult, aggregate_results, evaluate_fold
 from src.features.base import BaseFeatureExtractor
 
@@ -134,6 +144,38 @@ def exclude_works(corpus: Corpus, titles: Sequence[str], min_works_per_author: i
     if short:
         raise ValueError(f"除外後に作品数が {min_works_per_author} 未満となる作家（Inter-work 評価不能）: {short}")
     return dataclasses.replace(corpus, works=kept)
+
+
+def balanced_inter_splits(chunk_set: ChunkSet, seed: int) -> tuple[list[Split], list[dict[str, Any]]]:
+    """Inter-work の各 fold の Train を作家別に n_min 個へ間引く（補助実験用）．
+
+    fold ごとの乱数生成器は default_rng([seed, fold 番号]) で，fold の実行順に依存しない．
+    戻り値：間引き後の Split 列と，fold ごとの作家別 Train チャンク数（間引き前・後）の記録．
+    """
+    labels, author_ids = chunk_set.labels, chunk_set.author_ids
+    num_authors = len(author_ids)
+    splits = inter_work_splits(chunk_set)
+    balanced = [balance_train_split(s, labels, np.random.default_rng([seed, i])) for i, s in enumerate(splits)]
+
+    def counts(idx: np.ndarray) -> dict[str, int]:
+        return dict(zip(author_ids, np.bincount(labels[idx], minlength=num_authors).tolist(), strict=True))
+
+    def record(i: int, before: Split, after: Split) -> dict[str, Any]:
+        n_before = counts(before.train_idx)
+        n_min = min(n_before.values())
+        return {
+            "fold_index": i,
+            "fold": before.name,
+            "test_work": str(chunk_set.work_ids[before.test_idx[0]]),
+            "n_min": n_min,
+            "n_min_authors": [a for a, n in n_before.items() if n == n_min],
+            "n_train_before": n_before,
+            "n_train_after": counts(after.train_idx),
+            "test_unchanged": bool(np.array_equal(before.test_idx, after.test_idx)),
+        }
+
+    records = [record(i, b, a) for i, (b, a) in enumerate(zip(splits, balanced, strict=True))]
+    return balanced, records
 
 
 # ---------------------------------------------------------------- 追跡情報
@@ -303,6 +345,12 @@ def main() -> None:
     parser.add_argument("--run-name", help="出力ディレクトリ名（既定：日時）")
     parser.add_argument("--no-report", action="store_true", help="図表・report.md の生成を省略")
     parser.add_argument("--exclude-works", nargs="+", help="除外する作品名（チャンク分割前に適用，補助実験用）")
+    parser.add_argument(
+        "--balance-train-seeds",
+        nargs="+",
+        type=int,
+        help="Inter-work の各 fold で Train を作家別に最少作家の件数へ間引く乱数シード（1 個のみ，補助実験用）",
+    )
     args = parser.parse_args()
 
     with args.config.open(encoding="utf-8") as f:
@@ -315,6 +363,13 @@ def main() -> None:
     chunk_chars = args.chunk_chars or cfg["chunking"]["target_chunk_chars"]
     split_types = args.splits or cfg["experiment"]["splits"]
     ablation_L = cfg["experiment"]["ablation_chunk_chars"]
+    balance_seed: int | None = None
+    if args.balance_train_seeds:
+        if len(args.balance_train_seeds) != 1:
+            raise ValueError(f"--balance-train-seeds は 1 個のみ（複数シードは run を分けて実行）: {args.balance_train_seeds}")
+        if "intra" in split_types:
+            raise ValueError(f"--balance-train-seeds は Inter-work 専用．--splits inter のみを指定すること（指定値: {split_types}）")
+        balance_seed = args.balance_train_seeds[0]
     if args.ablation and not set(chunk_chars) & set(ablation_L):
         raise ValueError(f"--ablation 指定時は --chunk-chars に experiment.ablation_chunk_chars {ablation_L} のいずれかを含めること")
     # 長時間の実行前に全特徴量クラスの読み込みを検証（Fail-Fast）
@@ -345,6 +400,7 @@ def main() -> None:
             "splits": split_types,
             "ablation": args.ablation,
             **({"exclude_works": list(args.exclude_works)} if args.exclude_works else {}),
+            **({"balance_train_seeds": list(args.balance_train_seeds)} if balance_seed is not None else {}),
         },
         "variants": [{"name": v.name, "class": f"{v.cls.__module__}.{v.cls.__name__}", "params": v.params} for v in variants],
         "classifiers": [s.name for s in specs],
@@ -360,6 +416,9 @@ def main() -> None:
         meta["excluded_works"] = [{"work_id": w.work_id, "author_id": w.author_id, "title": w.title} for w in excluded]
         meta["included_works"] = [{"work_id": w.work_id, "author_id": w.author_id, "title": w.title} for w in corpus.works]
         print(f"[info] 除外作品: {[w.title for w in excluded]}（残り {len(corpus.works)} 作品）")
+    if balance_seed is not None:
+        meta["balance_train"] = {"seed": balance_seed, "rng": "np.random.default_rng([seed, fold_index])", "folds": {}}
+        print(f"[info] Train 間引き: seed={balance_seed}（Inter-work の各 fold で作家別 n_min 個へ）")
     if meta["git"]["dirty"]:
         print(f"[warn] 未コミットの変更あり（run_meta.json に記録）: {meta['git']['dirty_files']}")
     (run_dir / "run_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -374,13 +433,17 @@ def main() -> None:
 
     for L in chunk_chars:
         chunk_sets[L] = cs = build_chunks(corpus, L)
+        if balance_seed is not None:
+            bal_splits, bal_records = balanced_inter_splits(cs, balance_seed)
+            meta["balance_train"]["folds"][str(L)] = bal_records
+            print(f"[info] L={L} n_min: {[(r['fold'], r['n_min'], r['n_min_authors']) for r in bal_records]}")
         active = [v for v in variants if v.is_default or L in cfg["experiment"]["ablation_chunk_chars"]]
         for v in active:
             for split_type in split_types:
                 t0 = time.perf_counter()
                 results = [
                     r
-                    for s in make_splits(cs, split_type, cfg)
+                    for s in (bal_splits if balance_seed is not None else make_splits(cs, split_type, cfg))
                     for r in evaluate_fold(v.make, cs, s, sims, specs, similarity_kwargs=sim_kwargs, num_bins=num_bins)
                 ]
                 # 類似度 × 推論器ごとに fold をまとめる（results は fold → 類似度 → 推論器の順）

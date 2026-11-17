@@ -189,3 +189,25 @@ def inter_work_splits(chunk_set: ChunkSet) -> list[Split]:
     if missing:
         raise ValueError(f"Train に存在しない作家が生じる fold: {missing}")
     return splits
+
+
+def balance_train_split(split: Split, labels: np.ndarray, rng: np.random.Generator) -> Split:
+    """Train を作家ごとに一様非復元抽出で間引き，全作家の Train チャンク数を最少作家の数 n_min にそろえる．
+
+    作品の内訳は保存しない（作家内のチャンクから一様に抽出）．Test と Train の作家集合は不変．
+    `labels` は ChunkSet 全体の作家ラベル（shape: (num_chunks,)）．乱数は `rng` のみから生成．
+    """
+    # shape: (num_train,)
+    train_labels = labels[split.train_idx]
+    _, codes, counts = np.unique(train_labels, return_inverse=True, return_counts=True)
+    n_min = int(counts.min())
+    # 作家コードを第 1 キー，乱数を第 2 キーとして整列し，作家内の乱数順位を算出（intra_work_split と同じ方式）
+    order = np.lexsort((rng.random(train_labels.size), codes))
+    group_start = np.concatenate([[0], np.cumsum(counts)[:-1]])
+    rank = np.empty(train_labels.size, dtype=np.int64)
+    rank[order] = np.arange(train_labels.size) - group_start[codes[order]]
+    # shape: (num_authors * n_min,)
+    kept = np.sort(split.train_idx[rank < n_min])
+    kept_counts = np.unique(labels[kept], return_counts=True)[1]
+    assert kept_counts.size == counts.size and np.all(kept_counts == n_min), f"[{split.name}] 間引き後の作家別件数が不正: {kept_counts}"
+    return Split(name=split.name, train_idx=kept, test_idx=split.test_idx)
