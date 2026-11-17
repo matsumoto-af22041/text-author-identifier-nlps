@@ -5,7 +5,7 @@
     - `fit` 前の `transform` 呼び出しを禁止（Test データでの fit による漏洩を構造的に防止）
     - `transform` 出力が 2 次元 `(N_samples, D_features)` かつ全要素有限
     - 次元数 D_features が fit 後の全 `transform` 呼び出しで一定
-    - `non_negative = True` のクラスでは出力が非負（Jaccard / Dice 係数の適用条件）
+    - `non_negative = True` のクラスでは出力が非負（抽出器の出力の性質の宣言．類似度ヒストグラムの値域 [0, 1] / [-1, 1] の選択に使用）
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class NotFittedError(RuntimeError):
 class BaseFeatureExtractor(ABC):
     """テキスト列を特徴量行列へ写像する抽出器．"""
 
-    # 出力が非負ベクトルか（False の場合はコサイン類似度のみ適用可）
+    # 出力が非負ベクトルか（False の場合は負値を含みうる出力，例：LSI．コサイン類似度の値域は [-1, 1]）
     non_negative: ClassVar[bool] = True
 
     def __init_subclass__(cls, **kwargs: object) -> None:

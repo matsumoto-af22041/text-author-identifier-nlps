@@ -8,6 +8,11 @@
 
 類似度統計は (C, C) のペア類似度和・ペア数と固定ビンのヒストグラムで保持するため，
 Leave-One-Work-Out の全 fold を加算により統合（Pooled Out-of-Fold）可能．
+
+著者判別評価の同点処理（最大スコアを 2 作家以上が共有する照会）．
+    予測は同点ラベル C（判別不能）とし，混同行列 (C, C + 1) の列 C に計上．
+    Accuracy では誤判別，マクロ F1 では正解作家の FN（Recall の分母のみに算入）．
+    MRR の順位は悲観的順位 r_i = |{a | s_ia ≥ s_i,y_i}|（正解作家以上のスコアを持つ作家数，自身を含む）．
 """
 
 from __future__ import annotations
@@ -24,10 +29,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-from src.classifier import KNNClassifier, KnnMode, build_classifier  # noqa: E402
+from src.classifier import KNNClassifier, KnnMode, build_classifier, predict_from_scores, tie_label  # noqa: E402
 from src.dataset import ChunkSet, Split  # noqa: E402
 from src.features.base import BaseFeatureExtractor  # noqa: E402
-from src.similarity import NON_NEGATIVE_ONLY, get_similarity  # noqa: E402
+from src.similarity import get_similarity  # noqa: E402
 
 QUANTILE_PROBS = (0.0, 0.25, 0.5, 0.75, 1.0)
 
@@ -36,25 +41,35 @@ QUANTILE_PROBS = (0.0, 0.25, 0.5, 0.75, 1.0)
 
 
 def confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -> np.ndarray:
-    """行が正解，列が予測．shape: (C, C)．"""
+    """行が正解，列が予測（列 C は同点）．shape: (C, C + 1)．"""
     if y_true.shape != y_pred.shape:
         raise ValueError(f"形状不一致: {y_true.shape} vs {y_pred.shape}")
-    return np.bincount(y_true * num_classes + y_pred, minlength=num_classes**2).reshape(num_classes, num_classes)
+    if np.any((y_true < 0) | (y_true >= num_classes)):
+        raise ValueError(f"正解ラベルが [0, {num_classes}) の範囲外")
+    if np.any((y_pred < 0) | (y_pred > tie_label(num_classes))):
+        raise ValueError(f"予測ラベルが [0, {num_classes}]（{num_classes} は同点）の範囲外")
+    n_cols = num_classes + 1
+    return np.bincount(y_true * n_cols + y_pred, minlength=num_classes * n_cols).reshape(num_classes, n_cols)
 
 
 def classification_metrics(cm: np.ndarray) -> dict[str, Any]:
-    """混同行列から Accuracy，作家別 Precision / Recall / F1，マクロ F1 を算出．
+    """混同行列 (C, C + 1) から Accuracy，作家別 Precision / Recall / F1，マクロ F1，同点件数を算出．
 
+    同点（列 C）は Accuracy では誤判別，Recall の分母（正解作家の FN）にのみ算入し，Precision には影響しない．
     Test に現れない作家がある場合（Inter-work の単一 fold）はマクロ F1 を NaN とし，
     fold 統合後の混同行列（`aggregate_results`）で算出する．
     予測数 0 の作家の Precision（0 / 0）は 0 と定義（該当作家を一度も当てられていないため）．
     """
-    tp = np.diag(cm).astype(np.float64)
+    C = cm.shape[0]
+    if cm.shape != (C, C + 1):
+        raise ValueError(f"混同行列の形状 {cm.shape} が (C, C + 1) ではない")
+    tp = np.diag(cm[:, :C]).astype(np.float64)
     # shape: (C,)
-    pred_count, true_count = cm.sum(axis=0), cm.sum(axis=1)
+    pred_count, true_count = cm[:, :C].sum(axis=0), cm.sum(axis=1)
     accuracy = float(tp.sum() / cm.sum())
+    n_ties = int(cm[:, C].sum())
     if np.any(true_count == 0):
-        return {"accuracy": accuracy, "macro_f1": float("nan")}
+        return {"accuracy": accuracy, "macro_f1": float("nan"), "n_ties": n_ties}
     precision = np.divide(tp, pred_count, out=np.zeros_like(tp), where=pred_count > 0)
     recall = tp / true_count
     denom = precision + recall
@@ -62,6 +77,7 @@ def classification_metrics(cm: np.ndarray) -> dict[str, Any]:
     return {
         "accuracy": accuracy,
         "macro_f1": float(f1.mean()),
+        "n_ties": n_ties,
         "precision": precision.tolist(),
         "recall": recall.tolist(),
         "f1": f1.tolist(),
@@ -69,9 +85,16 @@ def classification_metrics(cm: np.ndarray) -> dict[str, Any]:
 
 
 def reciprocal_ranks(scores: np.ndarray, y_true: np.ndarray) -> np.ndarray:
-    """正解作家の順位 r_i（自分より厳密に高いスコア数 + 1）の逆数．scores shape: (n, C) → (n,)．"""
+    """正解作家の悲観的順位 r_i = |{a | s_ia ≥ s_i,y_i}|（自身を含む）の逆数．scores shape: (n, C) → (n,)．
+
+    全作家が同点の照会は r_i = C（逆順位 1 / C）．
+    """
+    if scores.ndim != 2 or y_true.shape != (scores.shape[0],):
+        raise ValueError(f"形状不一致: scores{scores.shape}, y_true{y_true.shape}")
+    # shape: (n, 1)
     true_score = np.take_along_axis(scores, y_true[:, None], axis=1)
-    return 1.0 / (1 + (scores > true_score).sum(axis=1))
+    # shape: (n,)，自身を含むため r_i ≥ 1
+    return 1.0 / (scores >= true_score).sum(axis=1)
 
 
 def mean_reciprocal_rank(scores: np.ndarray, y_true: np.ndarray) -> float:
@@ -238,8 +261,13 @@ class FoldResult:
     n_features: int
     extract_seconds: float
     similarity_seconds: float
+    # shape: (C, C + 1)，列 C は同点
     confusion: np.ndarray
     sim_stats: SimilarityStats
+    # 最大スコアを 2 作家以上が共有した照会数（同点ラベル C で予測）
+    n_ties: int
+    # ノルム 0 の照会（Test）チャンク数（推論方式に依存しない）
+    n_zero_query: int
     test_idx: np.ndarray = field(repr=False)
     y_true: np.ndarray = field(repr=False)
     y_pred: np.ndarray = field(repr=False)
@@ -273,9 +301,6 @@ def evaluate_fold(
     if extractor.is_fitted:
         raise RuntimeError("make_extractor は未 fit の新しい抽出器を返すこと")
     non_negative = type(extractor).non_negative
-    invalid = [s for s in similarity_names if s in NON_NEGATIVE_ONLY and not non_negative]
-    if invalid:
-        raise ValueError(f"{type(extractor).__name__} は非負ベクトルではないため {invalid} を適用不可")
 
     texts = chunk_set.texts
     labels = chunk_set.labels
@@ -289,7 +314,9 @@ def evaluate_fold(
     X_train = extractor.fit(train_texts).transform(train_texts)
     X_test = extractor.transform(test_texts)
     extract_seconds = time.perf_counter() - t0
+    # 負値を含む特徴量（LSI）のヒストグラム範囲は [-1, 1]
     edges = similarity_hist_edges(non_negative, num_bins)
+    n_zero_query = int((np.linalg.norm(X_test, axis=1) == 0).sum())
 
     def run_similarity(name: str) -> list[FoldResult]:
         sim_fn = get_similarity(name)
@@ -306,7 +333,11 @@ def evaluate_fold(
             clf = build_classifier(spec.method, similarity, num_classes, k=spec.k, knn_mode=spec.knn_mode or "per_author")
             clf.fit(X_train, y_train)
             scores = clf.scores_from_similarity(S) if isinstance(clf, KNNClassifier) else clf.scores(X_test)
-            y_pred = scores.argmax(axis=1)
+            # shape: (n_test,)，値域 {0, ..., C}（C は同点）
+            y_pred = predict_from_scores(scores)
+            confusion = confusion_matrix(y_test, y_pred, num_classes)
+            n_ties = int((y_pred == tie_label(num_classes)).sum())
+            assert n_ties == confusion[:, num_classes].sum(), "同点件数と混同行列の同点列が不一致"
             return FoldResult(
                 split_name=split.name,
                 similarity=name,
@@ -316,8 +347,10 @@ def evaluate_fold(
                 n_features=X_train.shape[1],
                 extract_seconds=extract_seconds,
                 similarity_seconds=sim_seconds,
-                confusion=confusion_matrix(y_test, y_pred, num_classes),
+                confusion=confusion,
                 sim_stats=stats,
+                n_ties=n_ties,
+                n_zero_query=n_zero_query,
                 test_idx=split.test_idx,
                 y_true=y_test,
                 y_pred=y_pred,
@@ -335,8 +368,11 @@ class AggregateResult:
 
     num_folds: int
     n_test: int
+    # shape: (C, C + 1)，列 C は同点
     confusion: np.ndarray
     mrr: float
+    n_ties: int
+    n_zero_query: int
     sim_stats: SimilarityStats
 
     @property
@@ -355,6 +391,8 @@ def aggregate_results(results: Sequence[FoldResult]) -> AggregateResult:
         n_test=int(rr.size),
         confusion=np.sum([r.confusion for r in results], axis=0),
         mrr=float(rr.mean()),
+        n_ties=sum(r.n_ties for r in results),
+        n_zero_query=sum(r.n_zero_query for r in results),
         sim_stats=SimilarityStats.merge([r.sim_stats for r in results]),
     )
 
@@ -370,10 +408,16 @@ def _save(fig: plt.Figure, path: Path) -> None:
 
 
 def plot_confusion_matrix(cm: np.ndarray, labels: Sequence[str], path: Path, title: str = "Confusion matrix") -> None:
-    fig, ax = plt.subplots(figsize=(4.8, 4.2))
+    """混同行列 (C, C + 1) を描画．最右列は同点（判別不能，"tie"）．"""
+    C = len(labels)
+    if cm.shape != (C, C + 1):
+        raise ValueError(f"混同行列の形状 {cm.shape} が (C, C + 1) = ({C}, {C + 1}) ではない")
+    fig, ax = plt.subplots(figsize=(5.6, 4.2))
     im = ax.imshow(cm, cmap="Blues")
     fig.colorbar(im, ax=ax)
-    ax.set(xticks=range(len(labels)), yticks=range(len(labels)), xticklabels=labels, yticklabels=labels)
+    ax.set(xticks=range(C + 1), yticks=range(C), xticklabels=[*labels, "tie"], yticklabels=labels)
+    # 同点列の境界線
+    ax.axvline(C - 0.5, color="gray", linewidth=1.0, linestyle="--")
     ax.set(xlabel="Predicted", ylabel="True", title=title)
     threshold = cm.max() / 2
     [

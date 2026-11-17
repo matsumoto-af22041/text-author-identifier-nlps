@@ -8,6 +8,7 @@
     run_meta.json          実行時の設定・CLI 引数・git 状態・コーパスハッシュ
     folds.csv              fold 単位の結果（Inter-work は 9 fold）
     summary.csv            条件単位の結果（Inter-work は全 fold の Pooled Out-of-Fold）
+                           n_ties：同点（判別不能）件数，n_zero_query：ノルム 0 の照会チャンク数
     results.json           summary と混同行列（plot_results.py の入力）
     similarity_stats.json  類似度統計（作家間ペア類似度和・ペア数・ヒストグラム）
     misclassified_best.md  最良モデルの誤判別チャンク抜粋
@@ -103,18 +104,6 @@ def classifier_specs(cfg: dict[str, Any]) -> list[ClassifierSpec]:
     return [*centroid, *knn]
 
 
-def similarities_for(cfg: dict[str, Any], chunk_chars: int, non_negative: bool) -> list[str]:
-    exp = cfg["experiment"]
-    restricted = set(exp["restricted_similarities"])
-    names = [
-        s
-        for s in cfg["similarity"]["names"]
-        if (s not in restricted or chunk_chars in exp["restricted_chunk_chars"])
-    ]
-    # 非負でない特徴量（LSI）はコサイン類似度のみ
-    return names if non_negative else [s for s in names if s == "cosine"]
-
-
 def make_splits(chunk_set: ChunkSet, split_type: str, cfg: dict[str, Any]) -> list[Split]:
     match split_type:
         case "intra":
@@ -180,6 +169,8 @@ def summary_row(
         "accuracy": agg.metrics["accuracy"],
         "macro_f1": agg.metrics["macro_f1"],
         "mrr": agg.mrr,
+        "n_ties": agg.n_ties,
+        "n_zero_query": agg.n_zero_query,
         **agg.sim_stats.scalars(),
         "extract_seconds": float(sum(r.extract_seconds for r in folds)),
         "similarity_seconds": float(sum(r.similarity_seconds for r in folds)),
@@ -203,6 +194,8 @@ def fold_rows(variant: FeatureVariant, L: int, split_type: str, folds: Sequence[
             "accuracy": r.metrics["accuracy"],
             "macro_f1": r.metrics["macro_f1"],
             "mrr": r.mrr,
+            "n_ties": r.n_ties,
+            "n_zero_query": r.n_zero_query,
             **r.sim_stats.scalars(),
             "extract_seconds": r.extract_seconds,
             "similarity_seconds": r.similarity_seconds,
@@ -229,15 +222,20 @@ def write_misclassified(
     num_examples: int,
     excerpt_chars: int,
 ) -> None:
-    """最良モデルの誤判別を確信度の高い順（予測作家スコア − 正解作家スコアの降順）に抜粋．"""
+    """最良モデルの誤判別を確信度の高い順（最大スコア − 正解作家スコアの降順）に抜粋．
+
+    同点（予測ラベル C）も誤判別に含め，予測欄は「同点」と表記（margin は最大スコア基準）．
+    """
     titles = {w.work_id: w.title for w in corpus.works}
-    authors = corpus.author_names
+    # 予測ラベル C（同点）の表示名を末尾に追加
+    authors = [*corpus.author_names, "同点"]
     # shape: (n_test_total,), (n_test_total, C)
     idx = np.concatenate([r.test_idx for r in folds])
     y_true = np.concatenate([r.y_true for r in folds])
     y_pred = np.concatenate([r.y_pred for r in folds])
     scores = np.concatenate([r.scores for r in folds])
-    margin = np.take_along_axis(scores, y_pred[:, None], 1)[:, 0] - np.take_along_axis(scores, y_true[:, None], 1)[:, 0]
+    # shape: (n_test_total,)，同点時も定義される最大スコアを予測側のスコアとする
+    margin = scores.max(axis=1) - np.take_along_axis(scores, y_true[:, None], 1)[:, 0]
     wrong = np.flatnonzero(y_true != y_pred)
     order = wrong[np.argsort(-margin[wrong], kind="stable")][:num_examples]
     pair_counts = Counter((authors[t], authors[p]) for t, p in zip(y_true[wrong], y_pred[wrong], strict=True))
@@ -255,7 +253,7 @@ def write_misclassified(
         "",
         f"- 条件：`{best['key']}`（params：`{best['params']}`）",
         f"- Pooled 指標：Accuracy {best['accuracy']:.4f}，マクロ F1 {best['macro_f1']:.4f}，MRR {best['mrr']:.4f}",
-        f"- 誤判別数：{wrong.size} / {y_true.size}",
+        f"- 誤判別数：{wrong.size} / {y_true.size}（うち同点 {best['n_ties']}，ノルム 0 の照会 {best['n_zero_query']}）",
         "",
         "## 誤判別の内訳（正解 → 予測）",
         "",
@@ -263,7 +261,7 @@ def write_misclassified(
         "| :--- | :--- | ---: |",
         *[f"| {t} | {p} | {n} |" for (t, p), n in pair_counts.most_common()],
         "",
-        f"## 確信度の高い誤判別（上位 {order.size} 件，margin = 予測作家スコア − 正解作家スコア）",
+        f"## 確信度の高い誤判別（上位 {order.size} 件，margin = 最大スコア − 正解作家スコア）",
         "",
         "| 作品 #チャンク | 正解 | 予測 | margin | 文字数 | 抜粋 |",
         "| :--- | :--- | :--- | ---: | ---: | :--- |",
@@ -299,7 +297,8 @@ def main() -> None:
     # 長時間の実行前に全特徴量クラスの読み込みを検証（Fail-Fast）
     variants = build_variants(cfg, feature_keys, args.ablation)
     specs = classifier_specs(cfg)
-    sim_kwargs = {"eps": cfg["similarity"]["eps"], "max_batch_bytes": cfg["similarity"]["max_batch_bytes"]}
+    sims = list(cfg["similarity"]["names"])
+    sim_kwargs = {"eps": cfg["similarity"]["eps"]}
     num_bins = cfg["evaluation"]["similarity_hist_bins"]
 
     corpus_path = PROJECT_ROOT / cfg["paths"]["processed_corpus"]
@@ -322,6 +321,7 @@ def main() -> None:
         },
         "variants": [{"name": v.name, "class": f"{v.cls.__module__}.{v.cls.__name__}", "params": v.params} for v in variants],
         "classifiers": [s.name for s in specs],
+        "similarities": sims,
         "git": git_state(),
         "corpus": corpus_meta(corpus_path),
         "author_ids": list(corpus.author_ids),
@@ -345,7 +345,6 @@ def main() -> None:
         chunk_sets[L] = cs = build_chunks(corpus, L)
         active = [v for v in variants if v.is_default or L in cfg["experiment"]["ablation_chunk_chars"]]
         for v in active:
-            sims = similarities_for(cfg, L, v.cls.non_negative)
             for split_type in split_types:
                 t0 = time.perf_counter()
                 results = [

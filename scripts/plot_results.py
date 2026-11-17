@@ -183,16 +183,7 @@ def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], f
     ]
 
 
-def section_similarity_classifier(res: Results, h: dict[str, Any], features: list[str]) -> list[str]:
-    sims = res.unique("similarity")
-    clf = h["classifier"]
-    sim_rows = [
-        [f, L, split, *[fmt(r["macro_f1"]) if (r := res.get(f, L, split, s, clf)) else "—" for s in sims]]
-        for f in features
-        for L in sorted(res.unique("chunk_chars"))
-        for split in ("intra", "inter")
-        if any(res.get(f, L, split, s, clf) for s in sims)
-    ]
+def section_classifier(res: Results, h: dict[str, Any], features: list[str]) -> list[str]:
     L, sim = h["chunk_chars"], h["similarity"]
     clfs = res.unique("classifier")
     clf_rows = [
@@ -202,15 +193,10 @@ def section_similarity_classifier(res: Results, h: dict[str, Any], features: lis
         if any(res.get(f, L, split, sim, c) for c in clfs)
     ]
     return [
-        "## 4. 類似度関数および推論方式の比較（Macro-F1）",
-        "",
-        f"### 4.1 類似度関数（推論 `{clf}`，Jaccard / Dice は計算量の制約により一部の L のみ）",
-        "",
-        *md_table(["特徴量", "L", "分割", *sims], sim_rows),
-        f"### 4.2 推論方式（$L = {L}$，`{sim}`）",
+        f"## 4. 推論方式の比較（Macro-F1，$L = {L}$，`{sim}`）",
         "",
         *md_table(["特徴量", "分割", *clfs], clf_rows),
-        "全条件の Accuracy・MRR・計算時間は `summary.csv` を参照",
+        "全条件の Accuracy・MRR・同点件数（`n_ties`）・ノルム 0 の照会数（`n_zero_query`）・計算時間は `summary.csv` を参照",
         "",
     ]
 
@@ -228,6 +214,7 @@ def section_best(res: Results, fig_dir: Path) -> list[str]:
         "",
         f"- 条件：`{b['key']}`（選択基準：Inter-work の Pooled `{res.cfg['report']['best_model_metric']}`，本採用設定のみ）",
         f"- Accuracy {b['accuracy']:.4f}，Macro-F1 {b['macro_f1']:.4f}，MRR {b['mrr']:.4f}",
+        f"- 同点（判別不能，混同行列の `tie` 列）{b['n_ties']} 件，ノルム 0 の照会 {b['n_zero_query']} 件（同点は誤判別，MRR は悲観的順位で集計）",
         "- 注：Test 結果から最良条件を選んでいるため，この値は楽観的な上限であり汎化性能の推定ではない",
         "",
         "![confusion](figures/confusion_best.png)",
@@ -291,7 +278,7 @@ def make_report(run_dir: Path) -> Path:
         *section_main_table(res, h, features),
         *section_distributions(res, h, features, fig_dir),
         *section_chunk_length(res, h, features, fig_dir),
-        *section_similarity_classifier(res, h, features),
+        *section_classifier(res, h, features),
         *section_best(res, fig_dir),
         *section_ablation(res, h),
     ]

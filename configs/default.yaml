@@ -52,12 +52,10 @@ split:
     # Intra-work Split で各作品から Test に回すチャンクの割合
     intra_test_ratio: 0.2
 
-# 類似度計算
+# 類似度計算（コサイン係数のみ：講義第 5 回 p.26，第 3 回 p.25）
 similarity:
-    names: [cosine, jaccard, dice]
+    names: [cosine]
     eps: 1.0e-12
-    # Jaccard / Dice の Σ min(x, y) バッチブロードキャストの中間配列上限（バイト）
-    max_batch_bytes: 268435456
 
 # 推論器
 classifier:
@@ -106,9 +104,6 @@ experiment:
     # 既定で実行する特徴量（--features で上書き可能）
     features: [A, B, C, D]
     splits: [intra, inter]
-    # Jaccard / Dice は O(N_test N_train D) のため実行するチャンク長を限定（L=100 は cosine のみ）
-    restricted_similarities: [jaccard, dice]
-    restricted_chunk_chars: [500, 1000]
     # アブレーションを実行するチャンク長
     ablation_chunk_chars: [500]
     output_dir: outputs

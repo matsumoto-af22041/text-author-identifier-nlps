@@ -1,7 +1,9 @@
 """類似度に基づく著者推定器（重心法 Centroid，k-近傍類似度法 k-NN）．
 
 推定器は登録ベクトル X_train: (N, M) と作家ラベル y_train: (N,) を保持し，
-照会ベクトル X: (n, M) に対する作家スコア行列 (n, C) を返す．予測は argmax（同点は小さいラベルを採用）．
+照会ベクトル X: (n, M) に対する作家スコア行列 (n, C) を返す．
+予測は最大スコアの作家．最大スコアを 2 作家以上が共有する場合（ゼロベクトルの照会等）は判別不能とし，
+同点ラベル C（`tie_label(C)`）を返す（最小ラベルへの偏りの防止）．
 """
 
 from __future__ import annotations
@@ -13,6 +15,22 @@ import numpy as np
 
 SimilarityCallable = Callable[[np.ndarray, np.ndarray], np.ndarray]
 KnnMode = Literal["per_author", "global"]
+
+
+def tie_label(num_classes: int) -> int:
+    """同点（判別不能）を表す予測ラベル．混同行列の列 C に対応．"""
+    return num_classes
+
+
+def predict_from_scores(scores: np.ndarray) -> np.ndarray:
+    """作家スコア (n, C) から予測ラベル (n,) を算出．最大スコアの完全一致が 2 作家以上なら同点ラベル C．"""
+    if scores.ndim != 2:
+        raise ValueError(f"scores は 2 次元 (n, C) を要求: {scores.shape}")
+    if not np.all(np.isfinite(scores)):
+        raise ValueError("scores に NaN / Inf を含む")
+    # shape: (n,)
+    n_max = (scores == scores.max(axis=1, keepdims=True)).sum(axis=1)
+    return np.where(n_max > 1, tie_label(scores.shape[1]), scores.argmax(axis=1))
 
 
 def _one_hot(y: np.ndarray, num_classes: int) -> np.ndarray:
@@ -40,8 +58,8 @@ class _SimilarityClassifier:
         raise NotImplementedError
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        # shape: (n,)
-        return self.scores(X).argmax(axis=1)
+        # shape: (n,)，値域 {0, ..., C}（C は同点）
+        return predict_from_scores(self.scores(X))
 
 
 class CentroidClassifier(_SimilarityClassifier):

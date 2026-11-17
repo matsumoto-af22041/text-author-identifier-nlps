@@ -18,7 +18,7 @@ Orchestrator の委譲対象：000・001・004・006～010．002・003・005 は
 |---|---|---|---|---|
 | 000 | [env-and-corpus](./000-env-and-corpus.md) | 0 | - | Done |
 | 001 | [core-pipeline](./001-core-pipeline.md) | 1 | 000 | Done |
-| 008 | [lecture-aligned-core](./008-lecture-aligned-core.md) | 1 | 001 | Todo |
+| 008 | [lecture-aligned-core](./008-lecture-aligned-core.md) | 1 | 001 | Done |
 | 010 | [a-scale-investigation](./010-a-scale-investigation.md) | 2 | 001 | Done |
 | 002 | [feature-a-stylometry](./002-feature-a-stylometry.md) | 2 | 001, 010 | Todo |
 | 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Todo |
@@ -44,6 +44,8 @@ Orchestrator の委譲対象：000・001・004・006～010．002・003・005 は
   - 006 の Intra-work を 5 シード化．
   - 発表資料の修正は Orchestrator の書き込み権限外（ `plans/` のみ）のため 009 として Executor に委譲．
 - **010（2026-11-17 レビュー済み）**：二乗ノルム割合（平均）は旧案（字種あり）で字種 0.98～0.99，旧案＋Min-Max で Bi-gram 0.88～0.96，案 C で Bi-gram / 記号 = 0.72 / 0.28（ $L = 100$ ），0.57 / 0.43（500），0.52 / 0.48（1000）．案 C が 3 構成中で唯一，単一ブロックに支配されない．再現コマンド： `uv run python scripts/investigate_a_scale.py`
+- **008（2026-11-17 レビュー済み）**：類似度をコサインのみに統一（001 の `cosine_similarity` と出力がビット一致），同点を混同行列 (C, C + 1) の同点列に計上し MRR を悲観的順位で算出．実データ $L = 1000$ で LOWO 重心法 Acc 0.551，F1 0.558，MRR 0.745（ベースライン `base` ），同点・ゼロベクトル 0 件．grep 基準は部分一致（`np.triu_indices`）を除外する単語境界つきに修正．再現コマンド： `uv run python scripts/verify_core_pipeline.py`
+  - 注意：悲観的順位では `knn_mode="global"` の上位 $k$ 外の作家（スコア 0 で同点）が順位を押し下げるため，global の MRR は旧値より低下（inter knn1_global 0.722 → 0.583）．global は比較用のため，MRR の考察は `per_author` と重心法を主とする（006）．
 - **検証で判明し設計に反映済みの事項**：
   - $\Delta S$ の主指標をマクロ版 `delta_s_macro` に決定（006）
   - Inter-work のマクロ F1 を Pooled Out-of-Fold で算出（006）

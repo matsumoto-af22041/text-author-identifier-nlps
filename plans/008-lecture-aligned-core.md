@@ -32,7 +32,7 @@
 - `numpy` のみ．サンプル間の 2 重 `for` ループ禁止．
 - `cosine_similarity` の数値結果は変更しない（001 の結果との連続性）．
 - 001 の Verification Criteria のうち，数値的健全性（コサインのみ）・単一バッチ過学習・シード再現性が引き続き通ること．
-- `grep -rn "jaccard\|dice\|Jaccard\|Dice" src scripts configs` の該当が 0 件になること（`presentation/` と `plans/` は対象外）．
+- `grep -rnw "jaccard\|dice\|Jaccard\|Dice" src scripts configs` （単語境界つき．`np.triu_indices` 等の部分一致を除外）の該当が 0 件になること（`presentation/` と `plans/` は対象外）．
 
 ## Verification Criteria
 

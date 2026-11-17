@@ -20,6 +20,8 @@
 - 結果の JSON / CSV には実行時の設定（乱数シード，チャンク長，特徴量ハイパーパラメータ），CLI 引数，git 状態，コーパスハッシュを `run_meta.json` として併記（Experiment Traceability）．
 - 主結果表として，B の付属語（既定）と内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）の Intra-work / Inter-work 比較を `report.md` の冒頭に出力（Core Message の検証）．
 - 類似度ギャップの主指標はマクロ版 `delta_s_macro` （ミクロ版 `delta_s_micro` を併記）．Inter-work（LOWO 9 fold）の Accuracy・マクロ F1 は全 fold の混同行列を合算する Pooled Out-of-Fold で算出．同点件数・ゼロベクトル件数（008）を結果表に併記．
+- MRR は悲観的順位（008）のため，`knn_mode="global"` では上位 $k$ 外の作家の同点で値が低く出る． `report.md` の MRR の考察は重心法と `per_author` を主とし，global の MRR にはその旨を注記．
+- 008 以前の出力（`outputs/smoke_base/` 等，混同行列が (C, C) の旧形式）は新しい `plot_results.py` で読めないため，再実行で作り直すこと．
 - `report.md` の各図表に，使用した数式の出典（講義資料の回・頁または `plans/research-context.md` の文献）を 1 行で併記．
 - 生成物は `outputs/` （git 管理外）に出力．
 
