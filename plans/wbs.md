@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～015．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～016．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -30,6 +30,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～015．002・0
 | 013 | [soseki-two-work-supplement](./013-soseki-two-work-supplement.md) | 3 | 004, 008 | Done |
 | 014 | [train-chunk-balance-supplement](./014-train-chunk-balance-supplement.md) | 3 | 013 | Done |
 | 015 | [centroid-norm-measurement](./015-centroid-norm-measurement.md) | 3 | 014 | Done |
+| 016 | [references-dir-rename](./016-references-dir-rename.md) | 4 | - | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -78,6 +79,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～015．002・0
   - 間引きで漱石の $\bar{\rho}_a$ が 0.0598 → 0.0688 に上昇．間引き後の Train で語彙・IDF を fit し直すため，漱石が Train の大半を占めると漱石に多い語の IDF が下がり漱石内の類似度が下がる，という経路が考えられる（仮説）．
   - 割り増し係数の比だけでは集中を説明しきれない fold あり（間引き後の `lowo_dazai_1` は比がほぼ 1 で漱石予測割合 0.566）．
   - 再現コマンド： `uv run python scripts/measure_centroid_norm.py` ．
+- **016（2026-11-18 レビュー済み）**：研究者が `docs/` を `references/` に改名．参照パス 8 箇所を置換し，`references/` を `.gitignore` に追加（受講者の実名を含む講義資料の誤コミット防止と，`run_meta.json` の `dirty` 判定の正常化）．
+  - 014・015 と本 Review Notes に残る `docs/` 4 箇所は，当時の `run_meta.json` の `dirty_files` に記録された文字列のため，記録として置換しない（Verification Criteria 2 の例外として Orchestrator が承認）．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

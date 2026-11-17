@@ -7,6 +7,9 @@ outputs/**
 !outputs/
 !outputs/**/.gitkeep
 
+# 講義資料・配布資料（受講者の実名を含み，著作権は大学側にあるため Git 管理対象外）
+references/
+
 # ============================== Python ==============================
 # Byte-compiled / optimized / DLL files
 __pycache__/

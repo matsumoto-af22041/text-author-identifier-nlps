@@ -5,7 +5,7 @@ paths:
     raw_corpus: data/raw/corpus20150426_with_titles.txt
     processed_corpus: data/processed/authors_corpus.json
 
-# 生コーパスの構造仕様（docs/AozoraCorpus.pdf 準拠：1 行目作品名，2 行目著者名，作品間に空行 1 行，句点改行）
+# 生コーパスの構造仕様（references/AozoraCorpus.pdf 準拠：1 行目作品名，2 行目著者名，作品間に空行 1 行，句点改行）
 corpus:
     # 配布仕様はシフト JIS だが，展開環境により UTF-8 へ変換済みの場合があるため順に厳密検証
     candidate_encodings: [cp932, utf-8]

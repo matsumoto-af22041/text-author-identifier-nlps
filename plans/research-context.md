@@ -8,7 +8,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - **Research Question / Hypothesis**: 意味内容（トピック・固有名詞）に依存する語彙特徴（内容語 TF-IDF 等）は未知作品（作品間分割）で著者識別精度が大きく低下する一方，文字 N-gram・句読点の相対頻度・品詞 N-gram・付属語（助詞・助動詞）頻度といった文体特徴に基づく類似度は，作品が異なっても同一著者の文章間で高い値を保ち，頑健な著者推定を可能にするという仮説．併せて，判定に必要な最小テキスト長（チャンク長）と推論方式（重心法・ $k$-NN 法）の比較．類似度はコサイン係数に統一．
 - **Proposed Approach / Contribution**: 配布サンプルコーパスのうち複数作品を持つ 4 作家（夏目漱石・太宰治・寺田寅彦・田山花袋，計 9 作品）を対象に，文境界を保持した可変長チャンク（ $L \in \{100, 500, 1000\}$ 文字）を構築．外部の類似度計算・分類ライブラリを用いず，観点別の 4 特徴量モジュール（A：文字 N-gram・記号・字種の相対頻度，B：品詞 N-gram・付属語，C：内容語 TF-IDF，D：SVD による LSI 潜在意味ベクトル）とコサイン類似度・推論器をフルスクラッチ実装．「同一作品内分割（トピック漏洩あり）」と「作品単位分割（純粋な文体評価）」の比較により文体類似度の有効性を検証．
 - **Core Message（発表の軸）**: 「情報検索では捨てる語が，著者識別では手がかりになる」．第 5 回 p.11 は助詞・助動詞を索引語として不適切な不要語とし，p.14-16 は『坊っちゃん』の頻度上位（て・だ・た・は・を…）を除いて tf・idf で並べ替えると「山嵐」「シャツ」等の題材語が上位に来ることを示す．本研究はこの講義の枠組みを裏返し，講義で捨てられる付属語の頻度が未知作品の著者識別では内容語より有効か，を検証する．これは仮説であり，結論は 006 の結果で確定させる．
-- **Design Principle（講義資料準拠）**: 数式・手法は講義資料（`docs/nlps26-*.pdf`）に根拠があるものを既定（本採用）とし，講義資料で補えない箇所は下記「Lecture Grounding & References」に外部文献を明記．出典のない独自設計は「独自設計」と明示．
+- **Design Principle（講義資料準拠）**: 数式・手法は講義資料（`references/nlps26-*.pdf`）に根拠があるものを既定（本採用）とし，講義資料で補えない箇所は下記「Lecture Grounding & References」に外部文献を明記．出典のない独自設計は「独自設計」と明示．
 - **Primary Technical Stack**: Python 3.13（ `uv` ），NumPy（ベクトル・行列演算および SVD ）， `fugashi-plus[unidic-lite]` （MeCab ベースの形態素解析，import 名は `fugashi` ），Matplotlib（可視化），PyYAML（実験設定）．
 
 ## Experimental Design
@@ -21,7 +21,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - **データ分割**：擬似反復（Pseudoreplication; Hurlbert, 1984）を避けるため，同一作品内分割（Intra-work Split，作品単位の層化ランダム分割，複数シード）と作品単位分割（Inter-work / Leave-One-Work-Out Split，9 fold）の両方で評価．
 - **チャンク分割**：1 行 = 1 文の構造を利用し，累積文字数が $L$ に達した文末で区切るグリーディ集約．作品末尾の $L$ 未満の端数チャンクは破棄．
 - **「学習」フェーズの定義**：重み更新ではなく，Train チャンクのみからの語彙辞書・IDF・SVD 射影行列の算出と，作家ごとの登録ベクトル（重心・登録チャンク一覧）の保存．Test チャンクは `transform` のみを通過．
-- **類似度指標**：コサイン係数（第 5 回 p.26，第 3 回 p.25）のみ．全特徴量 A～D に共通適用．構想発表（ `docs/C班_自然言語システムv2.pdf` p.4）で示した「コサイン類似度で比較」と一致．
+- **類似度指標**：コサイン係数（第 5 回 p.26，第 3 回 p.25）のみ．全特徴量 A～D に共通適用．構想発表（ `references/C班_自然言語システムv2.pdf` p.4）で示した「コサイン類似度で比較」と一致．
   - Jaccard / Dice 係数を採用しない理由：講義の Jaccard は「文中の単語の重なり率」（第 2 回 p.45）で語の有無のみを見る．本研究の主役である付属語は数百字のチャンクにほぼ必ず出現するため有無では作家を区別できないことが自明であり，Core Message の検証に寄与しない．この判断の根拠として，B の各特徴のチャンク出現率（007 で算出）を質疑応答用に提示．
 - **付属語 vs 内容語の統制比較（Core Message の検証）**：C（内容語 TF-IDF・語彙素）と B（付属語相対頻度・表層形）は重み付けとキーが異なるため，C との比較だけでは「語の種類」の効果を分離できない．B の抽出器で `target_pos` だけを内容語（名詞・動詞・形容詞）に差し替えた対照条件を設け，同一の表現（相対頻度・表層形・同一の品詞 2-gram ブロック）で付属語と内容語を比較する．
 - **推論方式**：
@@ -124,7 +124,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - `data/`: `raw/` （読み取り専用の元コーパス）と `processed/` （抽出済みの 4 作家・9 作品）
 - `outputs/`: 実験ログ（JSON / CSV），図（PNG / PDF），レポート．git 管理外
 - `presentation/`: 発表資料・質疑応答対策ドキュメント，発表に使う図のコピー
-- `docs/`: 講義資料・配布資料（読み取り専用の参照資料）
+- `references/`: 講義資料・配布資料（読み取り専用の参照資料）
 
 ### Domain Glossary & Mathematical Notation
 
