@@ -19,6 +19,10 @@ This file is the research specification of the project. It is imported by `CLAUD
   - 寺田寅彦：『映画芸術』『柿の種』
   - 田山花袋：『蒲団』『田舎教師』
 - **データ分割**：擬似反復（Pseudoreplication; Hurlbert, 1984）を避けるため，同一作品内分割（Intra-work Split，作品単位の層化ランダム分割，複数シード）と作品単位分割（Inter-work / Leave-One-Work-Out Split，9 fold）の両方で評価．
+- **Train チャンク数の作家間均等化（間引き，2026-11-18 決定）**：漱石の作品は長く，間引かないと Train の約半数が漱石となり，重心法・ $k$-NN 法の両方で漱石への予測集中が生じる（013～015 で確認）．主結果は，Intra-work / Inter-work の各分割で Train チャンクを作家ごとに一様非復元抽出し，全作家をその分割で最少の作家のチャンク数 $n_{\min}$ にそろえた条件で報告（5 シードの平均と標準偏差）．間引きなしの結果を併記．Test チャンクは間引かない．特徴抽出器の `fit` は間引き後の Train のみで行う．独自設計（作家ごとのテキスト量の偏りは著者識別の既知の論点：Stamatatos (2008)，要確認）．
+  - Intra-work は分割と間引きに同じシード（42～46）を使い，Inter-work は 5 シード（42～46）で間引く．fold ごとの乱数は `np.random.default_rng([seed, fold 番号])` ．
+  - 既知の限界：Inter-work では Test 作家だけが Train に 1 作品分しか持たず，作品の多様性の差は間引きで消えない．015 の実測では，重心とのコサインは作家内平均類似度 $\bar{\rho}_a$ が小さい作家ほど割り増される（ $1 / \|\hat{c}_a\|$ ）ため，この差が残りの偏りとして効く可能性を考察に明記．
+  - $L = 1000$ の Inter-work では $n_{\min}$ が 25 まで下がる fold があり，`per_author` の $k = 20$ はほぼ作家の全チャンクの平均に近づく．
 - **チャンク分割**：1 行 = 1 文の構造を利用し，累積文字数が $L$ に達した文末で区切るグリーディ集約．作品末尾の $L$ 未満の端数チャンクは破棄．
 - **「学習」フェーズの定義**：重み更新ではなく，Train チャンクのみからの語彙辞書・IDF・SVD 射影行列の算出と，作家ごとの登録ベクトル（重心・登録チャンク一覧）の保存．Test チャンクは `transform` のみを通過．
 - **類似度指標**：コサイン係数（第 5 回 p.26，第 3 回 p.25）のみ．全特徴量 A～D に共通適用．構想発表（ `references/C班_自然言語システムv2.pdf` p.4）で示した「コサイン類似度で比較」と一致．
@@ -70,6 +74,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 | UniDic 語彙素による表記統一（「大分」「だいぶ」） | 原形復元のみ（表記統一は UniDic 固有仕様） | 伝ほか (2007)（要確認） |
 | Min-Max 正規化（A のアブレーションのみ） | なし | Han, Kamber & Pei (2011) Ch. 3（要確認：節番号） |
 | 擬似反復 | なし | Hurlbert (1984) |
+| 作家ごとのテキスト量の偏り（Train チャンク数の間引き） | なし | Stamatatos (2008)（要確認）．間引きの手順は独自設計 |
 | $\Delta S$ ，4×4 作家間行列 | なし | 独自設計 |
 
 ### 文献リスト
@@ -79,6 +84,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - Hurlbert, S. H. (1984). Pseudoreplication and the design of ecological field experiments. *Ecological Monographs*, 54(2), 187–211.
 - Manning, C. D., Raghavan, P., & Schütze, H. (2008). *Introduction to Information Retrieval*. Cambridge University Press.
 - Mosteller, F., & Wallace, D. L. (1964). *Inference and Disputed Authorship: The Federalist*. Addison-Wesley.
+- Stamatatos, E. (2008). Author identification: Using text sampling to handle the class imbalance problem. *Information Processing & Management*, 44(2), 790–799.（要確認）
 - Stamatatos, E. (2009). A survey of modern authorship attribution methods. *Journal of the American Society for Information Science and Technology*, 60(3), 538–556.
 - 伝康晴・小木曽智信・小椋秀樹・山田篤・峯松信明・内元清貴・小磯花絵 (2007)．コーパス日本語学のための言語資源：形態素解析用電子化辞書の開発とその応用．『日本語科学』，22，101–123．（要確認）
 - 金明哲・樺島忠夫・村上征勝 (1993)．読点と書き手の個性．『計量国語学』，18(8)，382–391．（要確認）

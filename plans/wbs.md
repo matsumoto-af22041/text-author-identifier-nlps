@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～016．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～017．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -31,6 +31,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～016．002・0
 | 014 | [train-chunk-balance-supplement](./014-train-chunk-balance-supplement.md) | 3 | 013 | Done |
 | 015 | [centroid-norm-measurement](./015-centroid-norm-measurement.md) | 3 | 014 | Done |
 | 016 | [references-dir-rename](./016-references-dir-rename.md) | 4 | - | Done |
+| 017 | [readme-glossary](./017-readme-glossary.md) | 4 | 016 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -81,6 +82,9 @@ Orchestrator の委譲対象：000・001・004・006～010・012～016．002・0
   - 再現コマンド： `uv run python scripts/measure_centroid_norm.py` ．
 - **016（2026-11-18 レビュー済み）**：研究者が `docs/` を `references/` に改名．参照パス 8 箇所を置換し，`references/` を `.gitignore` に追加（受講者の実名を含む講義資料の誤コミット防止と，`run_meta.json` の `dirty` 判定の正常化）．
   - 014・015 と本 Review Notes に残る `docs/` 4 箇所は，当時の `run_meta.json` の `dirty_files` に記録された文字列のため，記録として置換しない（Verification Criteria 2 の例外として Orchestrator が承認）．
+- **017（2026-11-18 レビュー済み）**：README に「実験用語の定義」を新設（チャンク～ベースラインの全用語，数値は `c_only` ・ `balance_summary` ・014 からの転記）．旧記述（A の Min-Max 推奨，類似度 3 種，Jaccard / Dice の質問，Ticket N 表記，16 スライド）を現行設計に修正．
+  - README の `split.intra_seeds` と Intra-work の間引きの設定キーは 006 で追加予定のため，006 完了時にキー名を照合．
+  - 範囲外として残した軽微な旧記述：使用ライブラリに PyYAML の記載なし，`fit` の保存パラメータ例の「平均・標準偏差」．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
@@ -92,9 +96,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～016．002・0
   - いずれの案でも $\Delta S$ は特徴量内の比較（チャンク長別等）に限定して残す．採用時は 006 と `plans/research-context.md` の主評価指標を改訂．
 - **判別精度の基準値の明記（2026-11-17 提案）**：006 の報告に，全予測漱石（多数派クラス）の Accuracy，一様ランダムのマクロ F1，作家別の再現率を併記．
 - **漱石 2 作品版の補助実験（2026-11-17 採用 → 013）**：LOWO では Test 作品の作家だけ Train の作品数が 1 つ少ない構造的非対称があり，漱石（3 作品）の重心が他作家のチャンクを引き寄せている可能性（仮説）．主実験は 9 作品のまま（「2 作品以上の全作家」の選定基準を維持），補助実験として漱石から 1 作品ずつ除いた 3 通り（8 作品 × 3）を実行し，漱石への予測集中が作品数に起因するかを検証．`scripts/run_experiments.py` に作品除外オプションの追加が必要．恣意的な作品選択を避けるため 3 通りすべてを報告．
-- **006 での Train チャンク数の扱い（2026-11-17 提案，014 の結果を受けて）**：
+- **006 での Train チャンク数の扱い（2026-11-18 決定）**：Intra-work / Inter-work の両方で 014 の間引きを主結果とし，間引きなしを併記（`plans/research-context.md` ，006 に反映）．1 作品対称は計算時間と結果の整理の負担から不採用．
   - 背景：001 は「漱石のチャンク数過多」を `per_author` で回避できる前提で設計したが，014 で `per_author` が最も候補数に敏感と判明．重心法も疎な特徴では $\|c_a\|$ を介してチャンク数・作品の多様性の影響を受ける見込み（仮説，要実測）．
   - Train 構成の案：間引き（014 の方式，作家別チャンク数のみ均等），1 作品対称（全作家 1 作品ずつ＋チャンク数均等，作品の組合せは全 fold で計 120 通り）．
   - 推論器の案：作家別の平均類似度（ `per_author` で $k = |D_a|$ に相当）の追加は不採用（2026-11-17 決定）．チャンク数には期待値で不変だが，作家内の多様性が大きい作家に不利で，局所一致を捨て，講義資料にもないため．
   - 重心の長さ $\|\hat{c}_a\|$ と作家内平均類似度 $\bar{\rho}_a$ の実測は 015 で実施．
-  - 当初の Orchestrator 推奨（案 1：主実験は間引きなしのまま）は撤回済み．
