@@ -2,25 +2,37 @@
 
 ## Expected Deliverables & Design Policy
 
-- 担当：メンバー C
-- 第 5 回講義資料のベクトル空間モデルに基づき，内容語（名詞・動詞・形容詞）の TF-IDF 重みベクトルをフルスクラッチで算出する `WordTFIDFExtractor(BaseFeatureExtractor)` ．
-- **表記揺れの吸収**：作品（底本）間の漢字・仮名の揺れ（「大分」と「だいぶ」，「矢張」と「やはり」等）と活用による語形変化を正規化するため，語彙素（ `feature.lemma` ，未定義時は `surface` ）を特徴量キーとして固定採用．語彙数は上位 `max_features` 件（既定 2000）に制限．
-- **実験上の役割**：Intra-work では固有名詞・題材の一致で高精度，Inter-work では未知作品の語彙変化で精度低下することを示し，文体特徴（A・B）の優位性を際立たせるベースライン．
+- 担当：リーダー
+- 第 5 回講義資料のベクトル空間モデル（p.25）に基づき，内容語の TF-IDF 重みベクトルをフルスクラッチで算出する `WordTFIDFExtractor(BaseFeatureExtractor)` ．
+- **索引語の選択**：第 5 回 p.11 の索引語（文書の内容を表す単語）として，名詞・動詞・形容詞（UniDic の `pos1` ）を対象とする．
+- **特徴量キー**：第 2 回 p.16 の原形復元に相当する UniDic の語彙素（ `feature.lemma` ，未知語で `None` の場合は `surface` ）を固定採用．活用による語形変化に加え，作品（底本）間の漢字・仮名の揺れ（「大分」と「だいぶ」，「矢張」と「やはり」等）も統一される．後者は UniDic 固有の仕様で講義外（出典は `plans/research-context.md` の伝ほか (2007)）．
+- **数式（講義定義どおり）**：
+  - $\text{tf}(t, d) = \frac{\text{チャンク } d \text{ における語 } t \text{ の出現回数}}{\text{チャンク } d \text{ の総形態素数}}$ （第 5 回 p.12．総形態素数は補助記号・空白を除く全形態素数で，B と同じ定義）
+  - $\text{idf}(t) = \log \frac{N}{\text{df}(t)}$ （第 5 回 p.13．自然対数）
+  - 重み $w_{dt} = \text{tf}(t, d) \cdot \text{idf}(t)$
+  - Train の全チャンクに出現する語（ $\text{df}(t) = N$ ）は $\text{idf}(t) = 0$ となり重みが消える．これは第 5 回 p.11「どの文書にも均質に現れる語」は索引語として不適切，という定義と整合するため，補正（ $+1$ 等）は行わない．
+- 語彙数は Train の文書頻度上位 `max_features` 件（既定 2000，同数は辞書順で決定的に選択）に制限．
+- **実験上の役割**：Intra-work では固有名詞・題材の一致で高精度，Inter-work では未知作品の語彙変化で精度低下することを示し，文体特徴（A・B）と比較するベースライン．
 
 ## Target File Paths
 
 - `src/features/word_tfidf.py`
+- `configs/default.yaml` （ `features.C` セクションのみ： `params: {max_features: 2000}` ， `ablations: {}` ． `smooth_idf` は削除）
 
 ## Mandatory Constraints
 
 - Comply with `.claude/rules/research-coding.md` (loaded automatically).
 - `TfidfVectorizer` 等は禁止． `numpy` と `fugashi` のみで数式通りに実装．
-- `fit` で Train チャンク総数 $N$ と各語 $t$ の文書頻度 $\text{df}(t)$ を集計し， $\text{idf}(t) = \log \frac{N}{\text{df}(t)} + 1$ （既定）を保持． `smooth_idf=False` で講義定義の $\log \frac{N}{\text{df}(t)}$ ．
-- `transform` で相対出現頻度 $\text{tf}(t, d)$ と保持した $\text{idf}(t)$ の積を行列演算で算出．
-- コンストラクタ引数名は `configs/default.yaml` の `features.C.params` （ `smooth_idf` ， `max_features` ）と一致させること．
+- `fit` で Train チャンク総数 $N$ と各語 $t$ の文書頻度 $\text{df}(t)$ を集計し， $\text{idf}(t) = \log \frac{N}{\text{df}(t)}$ を保持．語彙は Train に出現した語のみなので $\text{df}(t) \geq 1$ が常に成立することを `assert` ．
+- `transform` で相対出現頻度 $\text{tf}(t, d)$ と保持した $\text{idf}(t)$ の積を行列演算で算出．Test のみに出現する語は無視．
+- 総形態素数が 0 のテキストは `ValueError` で停止（Fail-Fast）．語彙に一致する語を持たないチャンクはゼロベクトルとなり得るが，これは停止せず，件数を `transform` 呼び出しごとに属性へ記録（評価側の同点処理は 008 で対応）．
+- 内部の形態素解析処理（ `fugashi.Tagger` による語の抽出と tf・df 集計）は，005 から再利用できるようメソッドとして公開すること．
+- コンストラクタ引数名は `configs/default.yaml` の `features.C.params` （ `max_features` ）と一致させること．
 - `BaseFeatureExtractor` は `__init_subclass__` により fit 前 `transform` の停止，出力の 2 次元性・行数一致・有限値，次元数の一貫性， `non_negative = True` 時の非負性を自動検査．
 
 ## Verification Criteria
 
-- [ ] 手計算可能なトイデータ（3 文書・4 語程度）で `fit_transform` を実行し，TF，DF，IDF，TF-IDF が手計算結果と小数点以下 6 桁まで一致．
-- [ ] Test にのみ出現する未知語を含む入力でもゼロ除算（ $\text{df}(t) = 0$ ）を起こさず無視される．
+- [ ] 手計算可能なトイデータ（3 文書・4 語程度）で `fit_transform` を実行し，TF，DF，IDF，TF-IDF が手計算結果と小数点以下 6 桁まで一致．全文書に出現する語の IDF と重みが厳密に 0 であることを含む．
+- [ ] Test にのみ出現する未知語を含む入力でもゼロ除算を起こさず無視され，次元数が Train 時と一致．
+- [ ] 副詞として使われる「大分」と「だいぶ」を含む 2 文（例：「今日は大分寒くなった。」「今日はだいぶ寒くなった。」）で，両者が同一の語彙次元に集計されることを確認（UniDic 語彙素による表記統一の実測）．統一されない場合はその事実を報告（設計の前提が崩れるため）．
+- [ ] 『坊っちゃん』と『三四郎』の全文で「大分」の表層形を持つ形態素の `pos1` と `lemma` の内訳を集計し，地名（固有名詞，lemma = オオイタ）として誤解析された件数を報告（009 の調査で文脈なしの「大分」が地名と解析されることが判明したため）．
