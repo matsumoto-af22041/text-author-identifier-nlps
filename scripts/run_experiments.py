@@ -3,6 +3,7 @@
 使い方：
     uv run python scripts/run_experiments.py --config configs/default.yaml
     uv run python scripts/run_experiments.py --features A --chunk-chars 500 --ablation
+    uv run python scripts/run_experiments.py --features C --exclude-works 坊っちゃん --run-name excl_bocchan_C
 
 出力（outputs/<run_name>/）：
     run_meta.json          実行時の設定・CLI 引数・git 状態・コーパスハッシュ
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
 import importlib
 import json
 import platform
@@ -112,6 +114,26 @@ def make_splits(chunk_set: ChunkSet, split_type: str, cfg: dict[str, Any]) -> li
             return inter_work_splits(chunk_set)
         case _:
             raise ValueError(f"未知の分割方式: {split_type}")
+
+
+def exclude_works(corpus: Corpus, titles: Sequence[str], min_works_per_author: int = 2) -> Corpus:
+    """作品名で指定した作品をコーパスから除外（チャンク分割の前に適用し Intra / Inter の両方に効く）．
+
+    存在しない作品名，作品名の重複，除外後に作品数が min_works_per_author 未満となる作家はいずれも ValueError．
+    """
+    all_titles = [w.title for w in corpus.works]
+    dup = sorted(t for t, n in Counter(all_titles).items() if n > 1)
+    if dup:
+        raise ValueError(f"作品名が一意でないため除外対象を特定できない: {dup}")
+    unknown = sorted(set(titles) - set(all_titles))
+    if unknown:
+        raise ValueError(f"--exclude-works に存在しない作品名: {unknown}（対象作品: {all_titles}）")
+    kept = tuple(w for w in corpus.works if w.title not in set(titles))
+    counts = Counter(w.author_id for w in kept)
+    short = {name: counts[a] for a, name in zip(corpus.author_ids, corpus.author_names, strict=True) if counts[a] < min_works_per_author}
+    if short:
+        raise ValueError(f"除外後に作品数が {min_works_per_author} 未満となる作家（Inter-work 評価不能）: {short}")
+    return dataclasses.replace(corpus, works=kept)
 
 
 # ---------------------------------------------------------------- 追跡情報
@@ -280,6 +302,7 @@ def main() -> None:
     parser.add_argument("--ablation", action="store_true", help="アブレーション設定も実行")
     parser.add_argument("--run-name", help="出力ディレクトリ名（既定：日時）")
     parser.add_argument("--no-report", action="store_true", help="図表・report.md の生成を省略")
+    parser.add_argument("--exclude-works", nargs="+", help="除外する作品名（チャンク分割前に適用，補助実験用）")
     args = parser.parse_args()
 
     with args.config.open(encoding="utf-8") as f:
@@ -303,6 +326,9 @@ def main() -> None:
 
     corpus_path = PROJECT_ROOT / cfg["paths"]["processed_corpus"]
     corpus = load_corpus(corpus_path)
+    excluded = [w for w in corpus.works if args.exclude_works and w.title in set(args.exclude_works)]
+    if args.exclude_works:
+        corpus = exclude_works(corpus, args.exclude_works)
     run_name = args.run_name or datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = PROJECT_ROOT / cfg["experiment"]["output_dir"] / run_name
     if run_dir.exists():
@@ -318,6 +344,7 @@ def main() -> None:
             "chunk_chars": chunk_chars,
             "splits": split_types,
             "ablation": args.ablation,
+            **({"exclude_works": list(args.exclude_works)} if args.exclude_works else {}),
         },
         "variants": [{"name": v.name, "class": f"{v.cls.__module__}.{v.cls.__name__}", "params": v.params} for v in variants],
         "classifiers": [s.name for s in specs],
@@ -329,6 +356,10 @@ def main() -> None:
         "python": platform.python_version(),
         "numpy": np.__version__,
     }
+    if args.exclude_works:
+        meta["excluded_works"] = [{"work_id": w.work_id, "author_id": w.author_id, "title": w.title} for w in excluded]
+        meta["included_works"] = [{"work_id": w.work_id, "author_id": w.author_id, "title": w.title} for w in corpus.works]
+        print(f"[info] 除外作品: {[w.title for w in excluded]}（残り {len(corpus.works)} 作品）")
     if meta["git"]["dirty"]:
         print(f"[warn] 未コミットの変更あり（run_meta.json に記録）: {meta['git']['dirty_files']}")
     (run_dir / "run_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
