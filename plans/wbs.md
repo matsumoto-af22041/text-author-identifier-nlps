@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -26,6 +26,7 @@ Orchestrator の委譲対象：000・001・004・006～010．002・003・005 は
 | 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Todo |
 | 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008 | In Progress |
 | 009 | [presentation-lecture-alignment](./009-presentation-lecture-alignment.md) | 4 | - | Done |
+| 012 | [c-results-and-presentation](./012-c-results-and-presentation.md) | 4 | 004, 008, 009 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
