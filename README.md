@@ -10,12 +10,13 @@
 講義の必須要件（「全員がプログラム作成・評価実験・結果報告のすべてに関与すること」）を満たすため，各メンバー（担当 A〜D）は以下の **Step 1〜Step 4** を順番に遂行すること．用語の意味は下記「実験用語の定義」を参照．
 
 - [ ] **Step 1：環境構築と整形済みデータの生成**
-  - リポジトリをクローンして `uv sync` を実行し，配布された生コーパスデータを所定の生データ用フォルダに配置した上で，前処理スクリプトを 1 回実行して 4 作家・9 作品の整形済みデータを手元に生成する（詳細は下記「2. 環境構築とデータ準備手順」を参照）．
+  - リポジトリをクローンして `uv sync` を実行し，配布された生コーパス `corpus20150426_with_titles.txt` を `data/raw/corpus20150426_with_titles.txt` に配置した上で，前処理スクリプト `uv run python scripts/inspect_and_extract_corpus.py` を 1 回実行して 4 作家・9 作品の整形済みデータ `data/processed/authors_corpus.json` を手元に生成する（詳細は下記「2. 環境構築とデータ準備手順」を参照）．
 - [ ] **Step 2：自分の担当特徴量モジュール（ `plans/002-*.md` ， `plans/003-*.md` ， `plans/005-*.md` のいずれか 1 つ）の実装と単体検証**
   - 計画書フォルダ内の自分の担当チケット（担当 A は `plans/002-feature-a-stylometry.md` ，担当 B は `plans/003-feature-b-pos-function.md` ，担当 D は `plans/005-feature-d-lsi.md` ）を開き，抽象基底クラス `BaseFeatureExtractor` を継承した特徴量抽出クラス（`fit` と `transform` の 2 メソッド）をフルスクラッチで実装する．担当 C（ `plans/004-feature-c-word-tfidf.md` ）はリーダー担当で実装済み．
+  - `configs/default.yaml` の自分の特徴量のセクション（ `features.A` ， `features.B` ， `features.D` ）の `params` ・ `ablations` はチケットどおり設定済み．コンストラクタ引数名はそのキー名に合わせること．
   - チケット末尾に記載された「完了検証基準（Verification Criteria）」のテスト（ダミー文字列やトイデータによる形状・非負性・数値一致チェック）を手元でパスさせ，Git に Push する．
 - [ ] **Step 3：自分の PC での評価実験とアブレーション検証の実行**
-  - リーダーが用意した統合実験スクリプトを手元で実行し，自分の担当モジュールにおける本番コーパス実験および **担当別の比較検証（アブレーション）** の数値・グラフを出力して確認する．結果は Train チャンク数の作家間均等化（間引き）ありを主結果とし，間引きなしを併記する（ `plans/006-integration-and-eval.md` ）：
+  - リーダーが用意した統合実験スクリプトを手元で実行し，自分の担当モジュールにおける本番コーパス実験および **担当別の比較検証（アブレーション）** の数値・グラフを出力して確認する．結果は Train チャンク数の作家間均等化（間引き）ありを主結果とし，間引きなしを併記する（ `plans/006-integration-and-eval.md` ）．統合実験（間引き・Intra-work の 5 シード・作家別 MAP の平均・基準値）は，リーダー側の準備（チケット 022）の完了後に実行すること：
     - **担当 A**：既定は相対頻度のみ（ `scaling=none` ， `blocks=all` ）．比較条件は Min-Max 正規化（ `scaling=minmax` ），Bi-gram のみ（ `blocks=bigram` ），記号のみ（ `blocks=symbol` ）で，どのブロックが著者識別に効くか，句読点・文長だけでどこまで見分けられるかを確認（ `plans/002-feature-a-stylometry.md` ）．
     - **担当 B**：既定は付属語（ `target_pos=[助詞, 助動詞]` ）の表層形（ `token_key=surface` ）．比較条件は基本形（ `token_key=lemma` ），接続詞・連体詞・感動詞を加えた拡張条件，内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）で，付属語と内容語の統制比較が発表の中心（ `plans/003-feature-b-pos-function.md` ）．
     - **担当 C（リーダー担当，実装済み）**：同一作品内分割（Intra-work）と未知作品分割（Inter-work）における，本人・他人間の類似度ギャップ $\Delta S$ と判別精度の落差確認（ `plans/004-feature-c-word-tfidf.md` ， `plans/012-c-results-and-presentation.md` ）．
@@ -29,7 +30,7 @@
 
 1. **外部の機械学習・類似度計算ライブラリの使用禁止**
    - `scikit-learn`（`TfidfVectorizer`, `cosine_similarity`, `TruncatedSVD`, `KNeighborsClassifier` 等）の使用は課題規約により**一切禁止**．
-   - 使用可能なライブラリは前処理の形態素解析 **`fugashi-plus[unidic-lite]`**（コード上のインポート名は `import fugashi`）と行列演算 **`numpy`**，可視化の **`matplotlib`** のみ．
+   - 使用可能なライブラリは前処理の形態素解析 **`fugashi-plus[unidic-lite]`**（コード上のインポート名は `import fugashi`）と行列演算 **`numpy`**，可視化の **`matplotlib`**，実験設定の読み込みの **PyYAML**（パッケージ名 `pyyaml` ，インポート名は `import yaml` ）のみ．
 2. **全員が「実装・評価実験・発表」の全工程に関与すること**
    - 共通システム基盤（データ分割・類似度計算・推論・評価）の上に，**メンバー 4 名が 1 人 1 つの特徴量抽出モジュール（担当 A〜D）をプラグインとして実装**する．
    - 各自が自分の担当モジュールで本番データの評価実験を実行し，出力されたグラフ・表を用いてプレゼンの担当パート（各自 2 スライド）を作成・発表する．
@@ -55,8 +56,12 @@ uv sync
 
 Git リポジトリにはデータファイル本体を含めていないため，各自のローカル環境で以下を実行する．
 
-1. 講義で配布された青空文庫サンプルコーパス（`corpus20150426_with_titles.txt`）を生データ用フォルダ（`data` 配下の `raw` フォルダ）に配置する．
-2. コーパス検査・抽出用の前処理スクリプトを `uv run python` で実行し，実験対象の 4 作家・計 9 作品（夏目漱石 3 作品，太宰治 2 作品，寺田寅彦 2 作品，田山花袋 2 作品）の整形済み JSON データを生成する．
+1. 講義で配布された青空文庫サンプルコーパス（`corpus20150426_with_titles.txt`）を `data/raw/corpus20150426_with_titles.txt` に配置する（配置先は `configs/default.yaml` の `paths.raw_corpus` ）．
+2. コーパス検査・抽出用の前処理スクリプトを実行し，実験対象の 4 作家・計 9 作品（夏目漱石 3 作品，太宰治 2 作品，寺田寅彦 2 作品，田山花袋 2 作品）の整形済み JSON データ `data/processed/authors_corpus.json` を生成する（出力先は `configs/default.yaml` の `paths.processed_corpus` ）．
+
+```bash
+uv run python scripts/inspect_and_extract_corpus.py
+```
 
 ---
 
@@ -119,7 +124,7 @@ Git リポジトリにはデータファイル本体を含めていないため�
 ### 評価指標
 
 - **$\mu_{\text{same}}$ ， $\mu_{\text{diff}}$ ， $\Delta S$**（独自設計）：Test チャンクと Train チャンクのペアのうち，同一著者ペアの平均類似度 $\mu_{\text{same}}$ ，異著者ペアの平均類似度 $\mu_{\text{diff}}$ ，その差 $\Delta S = \mu_{\text{same}} - \mu_{\text{diff}}$ （類似度ギャップ）． $\Delta S$ が正で大きいほど，類似度が本人と他人を分けている．
-  - `delta_s_macro` （主指標）：4×4 作家間平均類似度行列の対角 4 要素の平均と非対角 12 要素の平均の差．ペア数の多い漱石に引きずられない．
+  - `delta_s_macro` （ $\Delta S$ のマクロ版とミクロ版のうちの主．特徴量間比較の主指標は作家別 MAP の平均）：4×4 作家間平均類似度行列の対角 4 要素の平均と非対角 12 要素の平均の差．ペア数の多い漱石に引きずられない．
   - `delta_s_micro` （併記）：全ペアを 1 件ずつ平均したミクロ版．チャンク数の多い作家ほど重みが大きい．
   - 例：C の $L = 500$ の `delta_s_macro` は Intra-work 0.0316（暫定），Inter-work 0.0057（ `c_only` ）．
   - 位置付け： $\Delta S$ は類似度の値の分布に依存する（例：C は類似度が 0.02～0.06 に集中）ため，特徴量間の比較には使わず，同一特徴量内の比較（チャンク長別等）に限定．
@@ -152,7 +157,7 @@ Git リポジトリにはデータファイル本体を含めていないため�
 すべての特徴量モジュールは抽象基底クラス `BaseFeatureExtractor` を継承し，以下の 2 メソッドを実装する：
 
 1. **`fit(self, train_texts: list[str]) -> Self`**
-   - **事前登録（Train）チャンクの文字列リストのみ**を受け取り，語彙辞書（どの単語・N-gram を何番目の次元に割り当てるか），IDF 値，正規化パラメータ（最小・最大値や平均・標準偏差），SVD 射影行列などを計算してインスタンス変数に保存する．
+   - **事前登録（Train）チャンクの文字列リストのみ**を受け取り，語彙辞書（どの単語・N-gram を何番目の次元に割り当てるか），IDF 値，正規化パラメータ（最小・最大値），SVD 射影行列などを計算してインスタンス変数に保存する．
    - **注意**：情報漏洩（Data Leakage）を防ぐため，テスト（Test）データを `fit` に混ぜてはならない．
 2. **`transform(self, texts: list[str]) -> np.ndarray`**
    - 任意のチャンク文字列リスト（Train または Test）を受け取り，`fit` で固定した辞書・パラメータを使って 2 次元 NumPy 配列（形状：`(len(texts), num_features)`，`dtype=np.float64`）に変換して返す．

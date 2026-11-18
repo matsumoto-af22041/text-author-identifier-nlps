@@ -79,25 +79,25 @@ features:
         params: {}
         ablations: {}
     A:
-        description: 文字 N-gram・文体統計量（Ticket 2）
+        description: 文字 Bi-gram・記号（読点・文末記号・開き括弧類）の相対頻度（plans/002）
         class: src.features.stylometry_char.StylometryCharExtractor
-        params: {scaling: minmax, max_features: 1000}
-        ablations: {scaling: [none, zscore]}
+        params: {scaling: none, blocks: all, max_features: 1000}
+        ablations: {scaling: [minmax], blocks: [bigram, symbol]}
     B:
-        description: 品詞 N-gram・機能語（Ticket 3）
+        description: 品詞 2-gram・付属語（助詞・助動詞）の相対頻度（plans/003）
         class: src.features.pos_function.POSFunctionExtractor
-        params: {token_key: surface, max_features: 1500}
-        ablations: {token_key: [lemma]}
+        params: {token_key: surface, target_pos: [助詞, 助動詞], max_features: 1500}
+        ablations: {token_key: [lemma], target_pos: [[助詞, 助動詞, 接続詞, 連体詞, 感動詞], [名詞, 動詞, 形容詞]]}
     C:
-        description: 内容語 TF-IDF（Ticket 4）
+        description: 内容語（名詞・動詞・形容詞）の TF-IDF（plans/004）
         class: src.features.word_tfidf.WordTFIDFExtractor
         params: {max_features: 2000}
         ablations: {}
     D:
-        description: LSI 潜在意味ベクトル（Ticket 5）
+        description: C の TF-IDF 行列の SVD による LSI 潜在意味ベクトル（plans/005）
         class: src.features.lsi_embedding.LSIEmbeddingExtractor
-        params: {n_components: 32}
-        ablations: {n_components: [8, 16, 64]}
+        params: {n_components: 32, projection: u}
+        ablations: {n_components: [8, 16, 64], projection: [us]}
 
 # 実験条件（scripts/run_experiments.py）
 experiment:

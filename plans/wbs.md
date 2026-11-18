@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～020．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～021．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -35,6 +35,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～020．002・0
 | 018 | [lecture-metric-check](./018-lecture-metric-check.md) | 3 | - | Done |
 | 019 | [citation-inventory](./019-citation-inventory.md) | 4 | - | Done |
 | 020 | [citation-removal-and-metric-names](./020-citation-removal-and-metric-names.md) | 4 | 019 | Done |
+| 021 | [member-onboarding-fixes](./021-member-onboarding-fixes.md) | 2 | - | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -102,6 +103,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～020．002・0
   - 決定（2026-11-18）：全文献を削除．講義の課題であり先行研究まで細かく問われないという判断で，Core Message の付属語の有効性は本研究の仮説として 006 の実測のみで支える．`plans/` は Orchestrator が修正（research-context，002，003，005，wbs）．完了済みチケット（004，009，017）の記述は当時の記録として残す．README と `presentation/` は 020 で修正．
 - **020（2026-11-18 レビュー済み）**：README と `presentation/` の 4 ファイルから外部文献 11 件の出典・文献リスト・「要確認」を削除し，講義資料からの導出か独自設計の明示に置換．指標名を作家別正解率の平均・作家別 F 値の平均・作家別 MAP の平均・正解率に変更（数値は不変）．文献名・擬似反復・旧指標名の `git grep` はいずれも 0 件．
   - 007 への申し送り：発表資料に残る `c_only` の正解率の数値の差し替え，storyline の表への主指標と基準値の追加，README の `delta_s_macro` の「主指標」表記の修正（007 に追記済み）．
+- **021（2026-11-18 レビュー済み）**：`configs/default.yaml` の A・B・D の `params` / `ablations` を 002・003・005 の値に合わせ， `description` を `plans/00N` 表記に更新．README に前処理コマンド・生コーパスの配置先・生成物，Step 3 は 022 の後に実行する旨，PyYAML を追記し，「平均・標準偏差」と `delta_s_macro` の「主指標」表記を修正．`base` の Inter-work 実行は 008 と同じ F1 0.558 で完走．B の `target_pos` （リストのリスト）は既存の `build_variants` で 1 条件 = 1 リストとして展開されることを確認（抽出器内でリストを書き換えない旨を 003 に追記）．README の「チケット 022」は 022 作成後にパスへ置換．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
