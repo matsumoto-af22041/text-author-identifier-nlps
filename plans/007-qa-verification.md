@@ -10,12 +10,17 @@
   - Q4：全体の破棄率に加え，作品単位の最大値（約 1.66%）を併記．
   - Q11：per_author で $k \to |D_a|$ の極限は「作家 $a$ の全チャンクとの平均類似度」であり，重心との類似度 $\text{sim}(\vec{q}, \vec{\mu}_a)$ とは一致しない．「全チャンク平均類似度への漸近（重心法に近い大域的評価）」に修正．
   - 新規の想定質問：「表記（漢字 / かな）の差は作家の文体か底本の方針か」．
+- 判別精度の主指標の変更（2026-11-18 決定）の反映：`presentation/` の資料（ `qa_verification_instructions.md` を除く）にある正解率（Accuracy）の数値を，006 の結果の作家別正解率の平均に置き換え（名称の修正は 020 で実施済みの前提）．
+  - 020 からの申し送り：`presentation/presentation_storyline.md` の Slide 9-10 と `qa_verification_instructions.md` の Q5 に，`c_only` の正解率の数値が名称のみ変更して残る．正解率は発表資料に載せない方針のため，作家別正解率の平均に差し替える．
+  - storyline の評価データ定義と表 3～5 に，主指標（作家別 MAP の平均，作家別正解率の平均）と基準値を追加．
+  - README の `delta_s_macro` の「（主指標）」は $\Delta S$ のマクロ版とミクロ版の間での主従であることが分かる表記に修正（特徴量間比較の主指標は作家別 MAP の平均）．新規の想定質問「なぜ普通の正解率を使わないのか」（Test の作家構成の偏り，正解率は結果 CSV の `accuracy` 列で回答可能）を追加．
 - 想定質問ごとに，本実験の既定仕様と，対照実験に用いた切り替えフラグ（ `scaling` ， `token_key` ， `knn_mode` ， $k$ ， `n_components` ）および 006 の結果の数値を対応付け．
 
 ## Target File Paths
 
 - `presentation/qa_defense_matrix.md`
 - `scripts/verify_qa_points.py`
+- `presentation/presentation_storyline.md` ， `README.md` （020 からの申し送りの修正）
 
 ## Mandatory Constraints
 

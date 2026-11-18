@@ -13,12 +13,22 @@
   - 間引きありの行は 5 シードの平均と標準偏差を出力．fold ごとの $n_{\min}$ とそれを決めた作家を `run_meta.json` に記録（014 と同形式）．
   - 追加した設定キー名が README の「実験用語の定義」（ `split.intra_seeds` 等）と一致することを確認し，異なれば README を修正．
   - `report.md` に，`per_author` の $k = 20$ は $n_{\min}$ が小さい fold で作家の全チャンク平均に近づく旨と，作品の多様性の差（015）が残る旨を注記．
+- **判別精度の主指標の変更（追加要件，2026-11-18 決定）**：定義は `plans/research-context.md` の「主評価指標」に従う．
+  - `summary.csv` に作家別正解率の平均 `balanced_accuracy` と作家別正解率（4 列）を追加．既存の `accuracy` 列は残す．
+  - `report.md` の表と図では，正解率（ `accuracy` ）を載せず，作家別正解率の平均と作家別 F 値の平均を主列とする．表記は「作家別正解率の平均」「作家別 F 値の平均」「作家別 MAP の平均」（Balanced Accuracy，マクロ F1，MAP の名称は使わない）．
+  - README 中の正解率の数値（C の Intra 0.955 / Inter 0.351，全予測漱石 0.477 等）を 006 の結果の作家別正解率の平均に置き換え（出典の run 名を併記）．指標の名称と定義の修正は 020 で実施済みの前提．
+  - 基準値（`plans/research-context.md` の「基準値」）を `summary.csv` の列（ `balanced_accuracy_random` ， `macro_f1_random` ， `mrr_random` ， `map_random` ）として出力し，`report.md` の各表に併記．`macro_f1_random` は Test の作家構成から算出（Inter-work は Pooled の構成）．
+- **作家別 MAP の平均の追加（追加要件，2026-11-18 決定）**：特徴量間比較の主指標．定義（AP の分母，悲観的順位，作家別平均→マクロ，Inter-work の Pooled，ランダム基準の式）は `plans/research-context.md` の「主評価指標」に従う．
+  - `src/evaluator.py` に実装し，`summary.csv` に `map_macro` ，全 Test チャンクの AP の単純平均 `map_micro` ，作家別 AP，ランダム基準 `map_random` の列を追加．`report.md` では `map_micro` を「全検索質問の AP の平均（講義の MAP と同じ集約）」として併記．間引きありの行は 5 シードの平均と標準偏差．
+  - `report.md` の主結果表（B の付属語 vs 内容語対照）と特徴量 A～D の比較表は `map_macro` を主列とし， `delta_s_macro` は特徴量内の比較（チャンク長別）に用いる旨を注記．
 - 既存実装：両スクリプトは依存チケットに先行して実装済み（ベースライン `base` で動作）．本チケットでは 002～005・008 の完了後に A～D を含めた動作検証と上記追加要件の実装を行い，不具合があれば修正．
 
 ## Target File Paths
 
 - `scripts/run_experiments.py`
 - `scripts/plot_results.py`
+- `src/evaluator.py` （MAP の追加）
+- `README.md` （「実験用語の定義」の MAP と設定キー名）
 - `configs/default.yaml` （ `features` ， `experiment` ， `report` セクション）
 
 ## Mandatory Constraints
@@ -26,7 +36,7 @@
 - Comply with `.claude/rules/research-coding.md` (loaded automatically).
 - 結果の JSON / CSV には実行時の設定（乱数シード，チャンク長，特徴量ハイパーパラメータ），CLI 引数，git 状態，コーパスハッシュを `run_meta.json` として併記（Experiment Traceability）．
 - 主結果表として，B の付属語（既定）と内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）の Intra-work / Inter-work 比較を `report.md` の冒頭に出力（Core Message の検証）．
-- 類似度ギャップの主指標はマクロ版 `delta_s_macro` （ミクロ版 `delta_s_micro` を併記）．Inter-work（LOWO 9 fold）の Accuracy・マクロ F1 は全 fold の混同行列を合算する Pooled Out-of-Fold で算出．同点件数・ゼロベクトル件数（008）を結果表に併記．
+- 類似度ギャップの主指標はマクロ版 `delta_s_macro` （ミクロ版 `delta_s_micro` を併記）．Inter-work（LOWO 9 fold）の作家別正解率の平均・作家別 F 値の平均（および参考の `accuracy` ）は全 fold の混同行列を合算する Pooled Out-of-Fold で算出．同点件数・ゼロベクトル件数（008）を結果表に併記．
 - `scripts/plot_results.py` の report.md にある「全 9 fold」の固定文言を，実際の fold 数（`run_meta.json` または結果の `num_folds` ）から生成するよう修正（013 の 8 作品版で不正確になるため）．
 - 作品数の偏りの補助実験：013 で追加した `--exclude-works` により，A～D についても漱石から 1 作品ずつ除いた 3 通りを実行し，`scripts/summarize_exclusion.py` で 9 作品版との差分を報告．
 - 重心の割り増しの実測：A～D についても `scripts/measure_centroid_norm.py` （015）を実行し，作家別の $\bar{\rho}_a$ と $1 / \|\hat{c}_a\|$ を報告．
@@ -39,7 +49,7 @@
 
 - [ ] スモーク実行： `uv run python scripts/run_experiments.py --config configs/default.yaml --features A B C D --chunk-chars 1000 --run-name smoke` が 10 分以内に完走し， `outputs/smoke/` に `run_meta.json` ，結果 CSV / JSON，図， `report.md` が生成される．
 - [ ] スモーク実行の結果に以下が含まれる．
-  - 各特徴量の $\mu_{\text{same}}$ ， $\mu_{\text{diff}}$ ， `delta_s_macro` ， `delta_s_micro` ，Accuracy，マクロ F1 の Intra-work / Inter-work 比較表
+  - 各特徴量の作家別 MAP の平均，作家別正解率の平均，作家別 F 値の平均，$\mu_{\text{same}}$ ， $\mu_{\text{diff}}$ ， `delta_s_macro` ， `delta_s_micro` の Intra-work / Inter-work 比較表
   - 同一著者 vs 異著者の類似度分布ヒストグラムと 4×4 作家間平均類似度ヒートマップ
   - 推論方式（Centroid，$k$-NN $k \in \{1, 3, 5, 10, 20\}$ ）の比較表
   - 最良モデルの混同行列と誤判別チャンクの抜粋ログ
@@ -47,6 +57,10 @@
 - [ ] Intra-work の結果に 5 シードの平均・標準偏差の列が出力される．
 - [ ] 間引きあり・なしの両方の行が結果に出力され，間引きありの全分割（Intra-work 5 シード，Inter-work 9 fold × 5 シード）で作家別 Train チャンク数が $n_{\min}$ に等しく，Test が間引きなしと同一であることを確認．
 - [ ] 間引きなしの行が，同じ設定の従来の出力（例：`outputs/c_only/summary.csv` の Inter-work の行）と数値一致．
+- [ ] 作家別正解率の平均の手計算一致：作家構成が偏った手作りの混同行列（例：作家 0 が Test の半数）で `balanced_accuracy` が作家別正解率の単純平均と一致し，全件を作家 0 と予測した場合に 0.25 となる．
+- [ ] 基準値の手計算一致：手作りの Test 構成（例：作家構成比 0.5, 0.2, 0.15, 0.15）で `macro_f1_random` が $\frac{1}{4} \sum_a \frac{2 \cdot p_a \cdot 1/4}{p_a + 1/4}$ と一致し，`mrr_random` が $25/48$ と一致．
+- [ ] MAP の手計算一致：Train 5 件・Test 2 件程度の手作りの類似度行列（同順位を含む）で，`map_macro` と作家別 AP が手計算値と一致．
+- [ ] MAP のランダム基準：$(N, R) = (100, 25)$ と $(708, 177)$ で，類似度を一様乱数（固定シード，1 万回）にしたときの AP の平均が，`plans/research-context.md` の期待値の式（約 0.282，約 0.257）と相対誤差 1% 以内で一致．
 - [ ] `--ablation` 付きスモーク実行（ `--chunk-chars 500` ，特徴量は A・B・D のいずれか 1 つ）で，本採用値以外のアブレーション設定行が結果に追加される．
 
 ## Full Experiment (optional, run by the researcher)

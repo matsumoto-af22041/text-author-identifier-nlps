@@ -7,8 +7,8 @@
 - **入力行列**：第 5 回 p.25 のベクトル空間モデルの重み（tf・idf）による文書-単語行列．004 の `WordTFIDFExtractor` （既定パラメータ）を内部で生成し，Train のみで fit した TF-IDF 行列 $X_{\text{train}} \in \mathbb{R}^{N \times M}$ を用いる．
 - **分解（講義 p.37 の図どおり）**： $X_{\text{train}} = U \Sigma V^\top$ ．中心化（平均の引き算）は講義にないため行わない．上位 $K$ 個の特異値 $\Sigma_K$ と右特異ベクトル $V_K \in \mathbb{R}^{M \times K}$ を保存．
 - **射影（講義 p.37「検索質問を $V$ によりトピックの重みベクトルに変換し， $U$ を用いて文書と比較する」）**：
-  - 既定 `projection="u"` ： $\hat{\vec{q}} = \Sigma_K^{-1} V_K^\top \vec{q}$ ．行列形式では $Z = X V_K \Sigma_K^{-1}$ ．Train 文書を射影すると $U_K$ の行と一致するため，Test の照会ベクトルと Train 文書を講義どおり $U$ の空間で比較できる．この式は講義スライドに明示がないため，出典は `plans/research-context.md` の Manning et al. (2008) §18.4 と Deerwester et al. (1990)．
-  - アブレーション `projection="us"` ： $Z = X V_K$ （Train 文書では $U_K \Sigma_K$ ）．特異値で各トピック次元を重み付けした比較（Deerwester et al. (1990) の文書間比較に相当）．
+  - 既定 `projection="u"` ： $\hat{\vec{q}} = \Sigma_K^{-1} V_K^\top \vec{q}$ ．行列形式では $Z = X V_K \Sigma_K^{-1}$ ．Train 文書を射影すると $U_K$ の行と一致するため，Test の照会ベクトルと Train 文書を講義どおり $U$ の空間で比較できる．この式は講義スライドに明示がないが，講義 p.37 の $X = U \Sigma V^\top$ の両辺に右から $V_K \Sigma_K^{-1}$ を掛けると $U_K = X V_K \Sigma_K^{-1}$ となることから導出でき，検索質問にも同じ変換を適用する．
+  - アブレーション `projection="us"` ： $Z = X V_K$ （Train 文書では $U_K \Sigma_K$ ）．特異値で各トピック次元を重み付けした比較（独自設計）．
 - 出力に負値を含むため，クラス属性 `non_negative = False` を明示的に宣言（類似度ヒストグラムの範囲が $[-1, 1]$ になる）．
 - 講義第 3 回の「分散表現」（word2vec 等のニューラル手法）とは別物．発表で LSI を「分散表現」と呼ばないこと（講義第 5 回 p.41 の「密ベクトル」とは呼んでよい）．
 
