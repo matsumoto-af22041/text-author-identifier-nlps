@@ -13,6 +13,19 @@ Leave-One-Work-Out の全 fold を加算により統合（Pooled Out-of-Fold）�
     予測は同点ラベル C（判別不能）とし，混同行列 (C, C + 1) の列 C に計上．
     Accuracy では誤判別，マクロ F1 では正解作家の FN（Recall の分母のみに算入）．
     MRR の順位は悲観的順位 r_i = |{a | s_ia ≥ s_i,y_i}|（正解作家以上のスコアを持つ作家数，自身を含む）．
+
+作家別正解率の平均（balanced_accuracy）は作家別の再現率（同点は FN）の単純平均．
+
+AP（検索質問 = Test チャンク，適合文書 = 同一著者の Train チャンク，第 5 回 p.31 を参考にした独自設計）．
+    Train 全件を類似度の降順に並べ，AP_i = (1 / R_i) Σ_{k : rel(k)} P@k（R_i は適合文書数）．
+    同じ類似度の同順位は悲観的順位（非適合文書を適合文書より前に置く）．
+    作家別 MAP の平均 map_macro = mean_a mean{ AP_i | y_i = a }，全 Test チャンクの AP の平均 map_micro = mean_i AP_i．
+
+基準値（特徴量を使わない予測，独自設計）．
+    balanced_accuracy_random = 1 / C，mrr_random = H_C / C（C = 4 で 25 / 48）．
+    macro_f1_random = (1 / C) Σ_a 2 p_a (1 / C) / (p_a + 1 / C)（p_a は Test の作家構成比）．
+    map_random：一様ランダムな並びの E[AP] = (1 / N) (H_N + (R - 1) / (N - 1) (N - H_N)) を検索質問ごとに求め，
+    map_macro / map_micro と同じ集約で平均．
 """
 
 from __future__ import annotations
@@ -53,10 +66,10 @@ def confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -
 
 
 def classification_metrics(cm: np.ndarray) -> dict[str, Any]:
-    """混同行列 (C, C + 1) から Accuracy，作家別 Precision / Recall / F1，マクロ F1，同点件数を算出．
+    """混同行列 (C, C + 1) から Accuracy，作家別 Precision / Recall / F1，作家別正解率の平均，マクロ F1，同点件数を算出．
 
     同点（列 C）は Accuracy では誤判別，Recall の分母（正解作家の FN）にのみ算入し，Precision には影響しない．
-    Test に現れない作家がある場合（Inter-work の単一 fold）はマクロ F1 を NaN とし，
+    Test に現れない作家がある場合（Inter-work の単一 fold）は作家別正解率の平均とマクロ F1 を NaN とし，
     fold 統合後の混同行列（`aggregate_results`）で算出する．
     予測数 0 の作家の Precision（0 / 0）は 0 と定義（該当作家を一度も当てられていないため）．
     """
@@ -69,13 +82,15 @@ def classification_metrics(cm: np.ndarray) -> dict[str, Any]:
     accuracy = float(tp.sum() / cm.sum())
     n_ties = int(cm[:, C].sum())
     if np.any(true_count == 0):
-        return {"accuracy": accuracy, "macro_f1": float("nan"), "n_ties": n_ties}
+        return {"accuracy": accuracy, "balanced_accuracy": float("nan"), "macro_f1": float("nan"), "n_ties": n_ties}
     precision = np.divide(tp, pred_count, out=np.zeros_like(tp), where=pred_count > 0)
+    # 作家別正解率（= 作家別再現率，同点は正解作家の FN）
     recall = tp / true_count
     denom = precision + recall
     f1 = np.divide(2 * precision * recall, denom, out=np.zeros_like(tp), where=denom > 0)
     return {
         "accuracy": accuracy,
+        "balanced_accuracy": float(recall.mean()),
         "macro_f1": float(f1.mean()),
         "n_ties": n_ties,
         "precision": precision.tolist(),
@@ -99,6 +114,94 @@ def reciprocal_ranks(scores: np.ndarray, y_true: np.ndarray) -> np.ndarray:
 
 def mean_reciprocal_rank(scores: np.ndarray, y_true: np.ndarray) -> float:
     return float(reciprocal_ranks(scores, y_true).mean())
+
+
+# ---------------------------------------------------------------- 検索評価（AP）と基準値
+
+
+def harmonic_number(n: int) -> float:
+    """H_n = Σ_{k=1}^{n} 1 / k．"""
+    if n < 1:
+        raise ValueError(f"調和数の引数は正の整数: {n}")
+    return float((1.0 / np.arange(1, n + 1, dtype=np.float64)).sum())
+
+
+def average_precision(S: np.ndarray, y_test: np.ndarray, y_train: np.ndarray) -> np.ndarray:
+    """各照会の AP（Train 全件を類似度の降順，同順位は悲観的順位）．S shape: (n_test, n_train) → (n_test,)．
+
+    悲観的順位：同じ類似度の中では非適合文書（rel = 0）を適合文書（rel = 1）より前に置く．
+    """
+    if S.shape != (y_test.size, y_train.size):
+        raise ValueError(f"形状不一致: S{S.shape}, y_test{y_test.shape}, y_train{y_train.shape}")
+    if not np.isfinite(S).all():
+        raise ValueError("類似度行列に NaN / Inf")
+    # shape: (n_test, n_train)
+    rel = y_test[:, None] == y_train[None, :]
+    # shape: (n_test,)
+    R = rel.sum(axis=1)
+    if np.any(R == 0):
+        raise ValueError("適合文書（同一著者の Train チャンク）のない照会が存在")
+    # 第 1 キー：類似度の降順（-S の昇順），第 2 キー：rel の昇順（同順位では非適合が先）
+    # np.lexsort は最後のキーを第 1 キーとし，最終軸（Train 方向）に沿って整列
+    order = np.lexsort((rel, -S), axis=-1)
+    rel_sorted = np.take_along_axis(rel, order, axis=1)
+    # shape: (n_test, n_train)，P@k = 上位 k 件中の適合数 / k
+    precision_at_k = np.cumsum(rel_sorted, axis=1) / np.arange(1, y_train.size + 1)
+    ap = (precision_at_k * rel_sorted).sum(axis=1) / R
+    assert np.isfinite(ap).all() and np.all((ap > 0) & (ap <= 1 + 1e-12)), "AP が (0, 1] の範囲外"
+    return ap
+
+
+def expected_random_ap(N: int, R: np.ndarray) -> np.ndarray:
+    """N 件（うち適合 R 件）の一様ランダムな並びにおける AP の期待値．R shape: (n,) → (n,)．
+
+    E[AP] = (1 / N) (H_N + (R - 1) / (N - 1) (N - H_N))．
+    """
+    R = np.asarray(R, dtype=np.float64)
+    if N < 2 or np.any((R < 1) | (R > N)):
+        raise ValueError(f"N ≥ 2，1 ≤ R ≤ N が必要: N={N}, R∈[{R.min()}, {R.max()}]")
+    H = harmonic_number(N)
+    return (H + (R - 1.0) / (N - 1.0) * (N - H)) / N
+
+
+def per_author_mean(values: np.ndarray, y: np.ndarray, num_classes: int) -> np.ndarray:
+    """作家別の平均．Test に現れない作家は NaN．shape: (n,) → (C,)．"""
+    if values.shape != y.shape:
+        raise ValueError(f"形状不一致: {values.shape} vs {y.shape}")
+    count = np.bincount(y, minlength=num_classes).astype(np.float64)
+    total = np.bincount(y, weights=values, minlength=num_classes)
+    return np.divide(total, count, out=np.full(num_classes, np.nan), where=count > 0)
+
+
+def macro_mean(per_author: np.ndarray) -> float:
+    """作家別の値の単純平均．Test に現れない作家がある場合（Inter-work の単一 fold）は NaN．"""
+    return float(per_author.mean()) if np.isfinite(per_author).all() else float("nan")
+
+
+def macro_f1_random(y_true: np.ndarray, num_classes: int) -> float:
+    """一様ランダムな予測でのマクロ F1 の基準値：作家 a の適合率 p_a，再現率 1 / C から F_a を求めて単純平均．"""
+    # shape: (C,)
+    p = np.bincount(y_true, minlength=num_classes) / y_true.size
+    r = 1.0 / num_classes
+    return float((2 * p * r / (p + r)).mean())
+
+
+def mrr_random(num_classes: int) -> float:
+    """C 作家を一様ランダムに並べたときの MRR の期待値 H_C / C．"""
+    return harmonic_number(num_classes) / num_classes
+
+
+def retrieval_metrics(ap: np.ndarray, ap_random: np.ndarray, y_true: np.ndarray, num_classes: int) -> dict[str, Any]:
+    """AP と基準値 E[AP] の作家別平均・map_macro・map_micro．入力 shape: (n_test,)．"""
+    ap_by_author = per_author_mean(ap, y_true, num_classes)
+    random_by_author = per_author_mean(ap_random, y_true, num_classes)
+    return {
+        "map_macro": macro_mean(ap_by_author),
+        "map_micro": float(ap.mean()),
+        "map_macro_random": macro_mean(random_by_author),
+        "map_micro_random": float(ap_random.mean()),
+        "ap_by_author": ap_by_author.tolist(),
+    }
 
 
 # ---------------------------------------------------------------- 類似度直接評価
@@ -273,6 +376,13 @@ class FoldResult:
     y_pred: np.ndarray = field(repr=False)
     # shape: (n_test, C)
     scores: np.ndarray = field(repr=False)
+    # shape: (n_test,)，推論方式に依存しない（同じ類似度の全推論器で同じ配列を共有）
+    ap: np.ndarray = field(repr=False)
+    ap_random: np.ndarray = field(repr=False)
+
+    @property
+    def num_classes(self) -> int:
+        return self.confusion.shape[0]
 
     @property
     def metrics(self) -> dict[str, Any]:
@@ -281,6 +391,10 @@ class FoldResult:
     @property
     def mrr(self) -> float:
         return mean_reciprocal_rank(self.scores, self.y_true)
+
+    @property
+    def retrieval(self) -> dict[str, Any]:
+        return retrieval_metrics(self.ap, self.ap_random, self.y_true, self.num_classes)
 
 
 def evaluate_fold(
@@ -328,6 +442,9 @@ def evaluate_fold(
         S = similarity(X_test, X_train)
         sim_seconds = time.perf_counter() - t1
         stats = similarity_stats(S, y_test, y_train, num_classes, edges)
+        # shape: (n_test,)，AP と一様ランダムな並びでの期待値（R_i は照会と同一著者の Train チャンク数）
+        ap = average_precision(S, y_test, y_train)
+        ap_random = expected_random_ap(y_train.size, (y_test[:, None] == y_train[None, :]).sum(axis=1))
 
         def run(spec: ClassifierSpec) -> FoldResult:
             clf = build_classifier(spec.method, similarity, num_classes, k=spec.k, knn_mode=spec.knn_mode or "per_author")
@@ -355,6 +472,8 @@ def evaluate_fold(
                 y_true=y_test,
                 y_pred=y_pred,
                 scores=scores,
+                ap=ap,
+                ap_random=ap_random,
             )
 
         return [run(spec) for spec in classifier_specs]
@@ -374,14 +493,36 @@ class AggregateResult:
     n_ties: int
     n_zero_query: int
     sim_stats: SimilarityStats
+    # shape: (n_test,)，全 fold の Test チャンクを連結（Pooled）
+    y_true: np.ndarray = field(repr=False)
+    ap: np.ndarray = field(repr=False)
+    ap_random: np.ndarray = field(repr=False)
+
+    @property
+    def num_classes(self) -> int:
+        return self.confusion.shape[0]
 
     @property
     def metrics(self) -> dict[str, Any]:
         return classification_metrics(self.confusion)
 
+    @property
+    def retrieval(self) -> dict[str, Any]:
+        return retrieval_metrics(self.ap, self.ap_random, self.y_true, self.num_classes)
+
+    @property
+    def baselines(self) -> dict[str, float]:
+        """特徴量を使わない予測の基準値（作家別 MAP の平均・全 Test チャンクの AP の平均は `retrieval`）．"""
+        C = self.num_classes
+        return {
+            "balanced_accuracy_random": 1.0 / C,
+            "macro_f1_random": macro_f1_random(self.y_true, C),
+            "mrr_random": mrr_random(C),
+        }
+
 
 def aggregate_results(results: Sequence[FoldResult]) -> AggregateResult:
-    """混同行列・逆順位・類似度統計を全 fold で合算（同一条件の fold 群を渡すこと）．"""
+    """混同行列・逆順位・AP・類似度統計を全 fold で合算（同一条件の fold 群を渡すこと）．"""
     keys = {(r.similarity, r.spec) for r in results}
     if len(keys) != 1:
         raise ValueError(f"異なる条件の fold が混在: {keys}")
@@ -394,6 +535,9 @@ def aggregate_results(results: Sequence[FoldResult]) -> AggregateResult:
         n_ties=sum(r.n_ties for r in results),
         n_zero_query=sum(r.n_zero_query for r in results),
         sim_stats=SimilarityStats.merge([r.sim_stats for r in results]),
+        y_true=np.concatenate([r.y_true for r in results]),
+        ap=np.concatenate([r.ap for r in results]),
+        ap_random=np.concatenate([r.ap_random for r in results]),
     )
 
 

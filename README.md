@@ -16,7 +16,7 @@
   - `configs/default.yaml` の自分の特徴量のセクション（ `features.A` ， `features.B` ， `features.D` ）の `params` ・ `ablations` はチケットどおり設定済み．コンストラクタ引数名はそのキー名に合わせること．
   - チケット末尾に記載された「完了検証基準（Verification Criteria）」のテスト（ダミー文字列やトイデータによる形状・非負性・数値一致チェック）を手元でパスさせ，Git に Push する．
 - [ ] **Step 3：自分の PC での評価実験とアブレーション検証の実行**
-  - リーダーが用意した統合実験スクリプトを手元で実行し，自分の担当モジュールにおける本番コーパス実験および **担当別の比較検証（アブレーション）** の数値・グラフを出力して確認する．結果は Train チャンク数の作家間均等化（間引き）ありを主結果とし，間引きなしを併記する（ `plans/006-integration-and-eval.md` ）．統合実験（間引き・Intra-work の 5 シード・作家別 MAP の平均・基準値）は，リーダー側の準備（チケット 022）の完了後に実行すること：
+  - リーダーが用意した統合実験スクリプトを手元で実行し，自分の担当モジュールにおける本番コーパス実験および **担当別の比較検証（アブレーション）** の数値・グラフを出力して確認する．結果は Train チャンク数の作家間均等化（間引き）ありを主結果とし，間引きなしを併記する（ `plans/006-integration-and-eval.md` ）．統合実験（間引き・Intra-work の 5 シード・作家別 MAP の平均・基準値）は，リーダー側の準備（ `plans/022-eval-pipeline-update.md` ）の完了後に実行すること：
     - **担当 A**：既定は相対頻度のみ（ `scaling=none` ， `blocks=all` ）．比較条件は Min-Max 正規化（ `scaling=minmax` ），Bi-gram のみ（ `blocks=bigram` ），記号のみ（ `blocks=symbol` ）で，どのブロックが著者識別に効くか，句読点・文長だけでどこまで見分けられるかを確認（ `plans/002-feature-a-stylometry.md` ）．
     - **担当 B**：既定は付属語（ `target_pos=[助詞, 助動詞]` ）の表層形（ `token_key=surface` ）．比較条件は基本形（ `token_key=lemma` ），接続詞・連体詞・感動詞を加えた拡張条件，内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）で，付属語と内容語の統制比較が発表の中心（ `plans/003-feature-b-pos-function.md` ）．
     - **担当 C（リーダー担当，実装済み）**：同一作品内分割（Intra-work）と未知作品分割（Inter-work）における，本人・他人間の類似度ギャップ $\Delta S$ と判別精度の落差確認（ `plans/004-feature-c-word-tfidf.md` ， `plans/012-c-results-and-presentation.md` ）．
@@ -95,7 +95,7 @@ uv run python scripts/inspect_and_extract_corpus.py
 - **Test（判定）チャンク**：著者が未知のものとして扱い，著者を推定する対象のチャンク．`transform` のみを通し，語彙・IDF・SVD 等の算出には使わない（データ漏洩の防止）．
 - **「学習」（ `fit` ）**：重みの反復更新ではなく，Train チャンクのみから語彙辞書（どの語・N-gram を何番目の次元にするか），IDF，SVD の射影行列などを算出して固定すること．推論器側の「学習」は作家ごとの登録ベクトルの保存のみ．
 - **fold**：Train / Test の組 1 回分．Inter-work では Test に回す作品ごとに 1 fold で計 9 fold（名前は `lowo_<作品 ID>` ，例：『坊っちゃん』を Test にした fold は `lowo_soseki_0` ）．Intra-work では 1 シードの分割が 1 組（例： `intra_seed42` ）．
-- **Intra-work（同一作品内分割）**：各作品のチャンクを無作為に Train / Test に分ける（作品ごとに Test 割合 0.2，設定キー `split.intra_test_ratio` ）．同じ作品のチャンクが Train と Test の両方に入るため，トピック漏洩あり．シード 42～46 の 5 回の平均と標準偏差を報告（設定キー `split.intra_seeds` ，006 で追加）．例： $L = 500$ ， `seed=42` で Train 1343 / Test 336 チャンク（ `c_only` ）．
+- **Intra-work（同一作品内分割）**：各作品のチャンクを無作為に Train / Test に分ける（作品ごとに Test 割合 0.2，設定キー `split.intra_test_ratio` ）．同じ作品のチャンクが Train と Test の両方に入るため，トピック漏洩あり．シード 42～46 の 5 回の平均と標準偏差を報告（設定キー `split.intra_seeds` ， `plans/022-eval-pipeline-update.md` で追加）．例： $L = 500$ ， `seed=42` で Train 1343 / Test 336 チャンク（ `c_only` ）．
 - **Inter-work（作品単位分割，LOWO：Leave-One-Work-Out）**：1 作品を丸ごと Test にし，残り 8 作品を Train にする．9 作品なので 9 fold．Test 作品の登場人物・題材は Train に含まれない．分割自体は乱数を使わない決定的な分割．
   - 例：『坊っちゃん』を Test にした fold（ $L = 500$ ，間引きなし）は，Test が『坊っちゃん』168 チャンク，Train が漱石 633（『こころ』『三四郎』）・太宰 330・寅彦 177・花袋 371 の計 1511 チャンク（ `c_only` ， `balance_summary` ）．
   - Test 作家だけ Train の作品数が 1 つ少ない構造的な非対称あり（013）．
@@ -106,7 +106,7 @@ uv run python scripts/inspect_and_extract_corpus.py
 ### Train チャンク数の作家間均等化（間引き）
 
 - **間引き**：各分割の Train チャンクを作家ごとに一様非復元抽出し，全作家のチャンク数を $n_{\min}$ にそろえる操作．Test チャンクは間引かない．特徴抽出器の `fit` は間引き後の Train のみで行う．コード上は `src/dataset.py` の `balance_train_split` ．独自設計．
-  - Intra-work は分割と間引きに同じシード（42～46），Inter-work は 5 シード（42～46）で間引き，fold ごとの乱数は `np.random.default_rng([seed, fold 番号])` ．
+  - Intra-work は分割と間引きに同じシード（42～46）を使い，間引きの乱数は分割の乱数列と独立な子乱数列 `np.random.default_rng(np.random.SeedSequence(seed).spawn(1)[0])` ．Inter-work は 5 シード（42～46）で間引き，fold ごとの乱数は `np.random.default_rng([seed, fold 番号])` ．設定キーは `split.balance_train` （間引きあり・なしの両方を実行するか）と `split.balance_seeds` （Inter-work の間引きのシード）．
 - **$n_{\min}$**：その分割の Train で最もチャンク数が少ない作家のチャンク数．例：『坊っちゃん』fold（ $L = 500$ ）は寅彦の 177 で，全作家を 177 にそろえて Train は計 708 チャンク（ `balance_summary` ）．最小は $L = 1000$ の『柿の種』fold（ `lowo_terada_1` ）の 25（014）．
 - **間引きあり・なしの両方を報告**：主結果は間引きあり（5 シードの平均と標準偏差），間引きなしを併記．
   - 理由：漱石の作品は長く，間引かないと Train の約半数が漱石になり，重心法・ $k$-NN 法の両方で予測が漱石に集中（013～015）．例：C の $L = 500$ 重心法で，漱石以外のチャンクのうち漱石と予測された割合は間引きなし 0.583，間引きあり 0.351（014，5 シード平均）．

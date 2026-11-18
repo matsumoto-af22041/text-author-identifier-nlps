@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～021．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～022．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -24,7 +24,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～021．002・0
 | 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Todo |
 | 004 | [feature-c-word-tfidf](./004-feature-c-word-tfidf.md) | 2 | 001 | Done |
 | 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Todo |
-| 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008 | In Progress |
+| 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008, 022 | In Progress |
 | 009 | [presentation-lecture-alignment](./009-presentation-lecture-alignment.md) | 4 | - | Done |
 | 012 | [c-results-and-presentation](./012-c-results-and-presentation.md) | 4 | 004, 008, 009 | Done |
 | 013 | [soseki-two-work-supplement](./013-soseki-two-work-supplement.md) | 3 | 004, 008 | Done |
@@ -36,6 +36,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～021．002・0
 | 019 | [citation-inventory](./019-citation-inventory.md) | 4 | - | Done |
 | 020 | [citation-removal-and-metric-names](./020-citation-removal-and-metric-names.md) | 4 | 019 | Done |
 | 021 | [member-onboarding-fixes](./021-member-onboarding-fixes.md) | 2 | - | Done |
+| 022 | [eval-pipeline-update](./022-eval-pipeline-update.md) | 3 | 014, 021 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -104,6 +105,12 @@ Orchestrator の委譲対象：000・001・004・006～010・012～021．002・0
 - **020（2026-11-18 レビュー済み）**：README と `presentation/` の 4 ファイルから外部文献 11 件の出典・文献リスト・「要確認」を削除し，講義資料からの導出か独自設計の明示に置換．指標名を作家別正解率の平均・作家別 F 値の平均・作家別 MAP の平均・正解率に変更（数値は不変）．文献名・擬似反復・旧指標名の `git grep` はいずれも 0 件．
   - 007 への申し送り：発表資料に残る `c_only` の正解率の数値の差し替え，storyline の表への主指標と基準値の追加，README の `delta_s_macro` の「主指標」表記の修正（007 に追記済み）．
 - **021（2026-11-18 レビュー済み）**：`configs/default.yaml` の A・B・D の `params` / `ablations` を 002・003・005 の値に合わせ， `description` を `plans/00N` 表記に更新．README に前処理コマンド・生コーパスの配置先・生成物，Step 3 は 022 の後に実行する旨，PyYAML を追記し，「平均・標準偏差」と `delta_s_macro` の「主指標」表記を修正．`base` の Inter-work 実行は 008 と同じ F1 0.558 で完走．B の `target_pos` （リストのリスト）は既存の `build_variants` で 1 条件 = 1 リストとして展開されることを確認（抽出器内でリストを書き換えない旨を 003 に追記）．README の「チケット 022」は 022 作成後にパスへ置換．
+- **022（2026-11-18 レビュー済み）**：Intra-work の 5 シード化，Intra-work / Inter-work の間引き（設定ファイルに一本化），作家別正解率・作家別 AP・作家別 MAP の平均・全 Test チャンクの AP の平均・基準値 4 種を実装．
+  - 手計算一致（ `balanced_accuracy` 0.625，`macro_f1_random` ，`mrr_random` $= 25/48$ ，悲観的順位を含む MAP），MAP のランダム基準は乱択 1 万回で相対誤差 0.20% / 0.08%．
+  - スモーク（ `base` ・C， $L = 1000$ ）は 99 秒．間引きありの全 50 記録で作家別 Train 数 $= n_{\min}$ ，Test 不変．間引きなしの行は `c_only` と全指標で文字列一致，間引きありの Inter-work は 014 の `bal_s42` / `bal_s46` と一致．2 回実行で `summary.csv` の SHA-256 一致．
+  - 値の例（C， $L = 1000$ ，Inter-work，間引きあり，重心法）：作家別正解率の平均 0.332 ± 0.028，作家別 MAP の平均 0.341 ± 0.003（基準値 0.267）．
+  - 設計の変更：Intra-work の間引きの乱数を分割と独立な子乱数列に（research-context と README に反映）．`--balance-train-seeds` を廃止し設定ファイルに一本化（014 の再現と `scripts/summarize_balance.py` は `1f50178` 以前のスクリプトで行う）．計算時間の列は `timings.csv` へ移動．間引きなしの Inter-work は決定的分割のため 1 回のみ．
+  - Full Experiment（ `base` ・C の全 $L$ ）は 7～10 分の見積もり．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

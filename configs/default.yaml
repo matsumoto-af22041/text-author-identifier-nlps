@@ -51,6 +51,13 @@ orthography:
 split:
     # Intra-work Split で各作品から Test に回すチャンクの割合
     intra_test_ratio: 0.2
+    # Intra-work Split の乱数シード（シードごとに 1 回分割し，平均と標準偏差を報告）
+    intra_seeds: [42, 43, 44, 45, 46]
+    # Train チャンク数の作家間均等化（間引き）．true のとき同じ run で間引きあり・なしの両方を実行
+    #   Intra-work：分割と同じシード（intra_seeds）から独立な子乱数列を生成して間引く
+    #   Inter-work：balance_seeds の各シードで，fold ごとに default_rng([seed, fold 番号]) で間引く（014 と同じ）
+    balance_train: true
+    balance_seeds: [42, 43, 44, 45, 46]
 
 # 類似度計算（コサイン係数のみ：講義第 5 回 p.26，第 3 回 p.25）
 similarity:
@@ -115,7 +122,7 @@ report:
         chunk_chars: 500
         similarity: cosine
         classifier: knn5_per_author
-    # 最良モデル選択の基準（Inter-work の Pooled 指標，本採用の特徴量設定のみ対象）
-    best_model_metric: macro_f1
+    # 最良モデル選択の基準（Inter-work の Pooled 指標のシード平均，本採用の特徴量設定のみ対象）
+    best_model_metric: balanced_accuracy
     num_misclassified_examples: 20
     excerpt_chars: 120
