@@ -109,7 +109,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - **Language / Environment**: Python 3.13 / `uv` （ `.python-version` を `3.13` に固定）
 - **Core Libraries**:
   - `numpy` ：TF-IDF，コサイン類似度，SVD（LSI）のフルスクラッチ行列演算
-  - `fugashi-plus[unidic-lite]` ：Python 3.13 対応・型ヒント同梱の `fugashi` ドロップイン代替と同梱軽量 UniDic 辞書（OS 側の MeCab 導入不要）
+  - `fugashi-plus[unidic-lite]` ：Python 3.13 対応・型ヒント同梱の `fugashi` ドロップイン代替と同梱軽量 UniDic 辞書（OS 側の MeCab 導入不要）．形態素解析は共通モジュール `src/morphology.py` のテキスト単位のプロセス内キャッシュを経由して行う（2026-11-23 決定，025・026）．キャッシュは解析結果のみを保持し，Train に依存する量（語彙・IDF・SVD 等）は保持しない
   - `matplotlib` ：混同行列，チャンク長別推移，同一著者・異著者間の類似度分布の描画
   - `pyyaml` ：実験条件・ハイパーパラメータの外部設定ファイル読み込み
 - **Experiment Management / Config Tools**: `configs/default.yaml` （特徴量レジストリ・実験条件），実行ごとの `run_meta.json` （設定・CLI 引数・git 状態・コーパスハッシュ）
@@ -128,6 +128,7 @@ This file is the research specification of the project. It is imported by `CLAUD
 - `configs/`: 実験条件・ハイパーパラメータ・特徴量レジストリ（YAML）
 - `src/`: 再利用可能なコアロジック
   - `dataset.py` ：対象作品抽出，文境界チャンク分割，Intra-work / Inter-work 分割器
+  - `morphology.py` ：形態素解析（ `fugashi` ）の共通処理とテキスト単位のキャッシュ（026）
   - `similarity.py` ：コサイン類似度のベクトル化実装
   - `classifier.py` ：重心法・ $k$-NN 法（ `per_author` / `global` ）の著者推定器
   - `evaluator.py` ：類似度直接評価（ $\mu_{\text{same}}$ ， $\mu_{\text{diff}}$ ， $\Delta S$ ，4×4 作家間行列），作家別 MAP の平均と著者判別評価（作家別正解率の平均，作家別 F 値の平均，混同行列，MRR）と各基準値

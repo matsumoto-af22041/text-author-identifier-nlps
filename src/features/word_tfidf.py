@@ -10,6 +10,10 @@
 総形態素数は補助記号（`pos1 == "補助記号"`）と空白（`pos1 == "空白"`）を除く全形態素数（B と同じ定義）．
 Train の全チャンクに出現する語は idf = 0 となり重みが消える（第 5 回 p.11 の「どの文書にも均質に現れる語」）．
 補正（+1 等）は行わない．
+
+形態素解析は `src.morphology.morphemes_cached` （テキスト単位のプロセス内キャッシュ，Ticket 26）を使い，
+fold・シード・条件の間で同じチャンクを再解析しない．キャッシュは解析結果のみで，語彙・df・IDF は fit ごとに
+Train のみから算出．
 """
 
 from __future__ import annotations
@@ -17,13 +21,12 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
 from typing import ClassVar, Self
 
-import fugashi
 import numpy as np
 
 from src.features.base import BaseFeatureExtractor
+from src.morphology import Tagger, morphemes_cached, shared_tagger
 
 
 @dataclass(frozen=True)
@@ -55,16 +58,17 @@ class WordTFIDFExtractor(BaseFeatureExtractor):
         # transform 呼び出しごとのゼロベクトル行数（語彙に一致する語を持たないチャンク）
         self.n_zero_rows_history_: list[int] = []
 
-    @cached_property
-    def tagger(self) -> fugashi.Tagger:
-        return fugashi.Tagger()
+    @property
+    def tagger(self) -> Tagger:
+        """共有 Tagger（検証スクリプトで生の素性を確認する用途．特徴量の計算は analyze のキャッシュ経由）．"""
+        return shared_tagger()
 
     # ---- 形態素解析・頻度集計（005 から再利用する公開メソッド） ----
 
     def analyze(self, text: str) -> AnalyzedText:
         """テキストを形態素解析し，索引語キー列と総形態素数を返す．総形態素数 0 は ValueError．"""
-        # fugashi のノードは次の解析で再利用されるため，(pos1, key) を即時に確定
-        morphs = [(node.feature.pos1, node.feature.lemma or node.surface) for node in self.tagger(text)]
+        # 特徴量キーは語彙素（lemma が None の未知語は表層形，Morpheme で代替済み）
+        morphs = [(m.pos1, m.lemma) for m in morphemes_cached(text)]
         num_morphemes = sum(pos1 not in self.excluded_pos for pos1, _ in morphs)
         if num_morphemes == 0:
             raise ValueError(f"{type(self).__name__}: 総形態素数が 0 のテキスト: {text[:50]!r}")

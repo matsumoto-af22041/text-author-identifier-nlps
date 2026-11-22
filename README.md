@@ -163,6 +163,11 @@ uv run python scripts/inspect_and_extract_corpus.py
    - 任意のチャンク文字列リスト（Train または Test）を受け取り，`fit` で固定した辞書・パラメータを使って 2 次元 NumPy 配列（形状：`(len(texts), num_features)`，`dtype=np.float64`）に変換して返す．
    - 未知語（`fit` 時に出現しなかった単語や N-gram）は無視し，`NaN` や `Inf` が発生しないことを `assert np.all(np.isfinite(X))` で保証する．
 
+形態素解析を使うモジュール（B・C・D，および今後追加する特徴量・スクリプト）は `fugashi.Tagger` を直接作らず，共通モジュール `src/morphology.py` を使う（ `plans/026-shared-morph-cache.md` ）．
+
+- `morphemes_cached(text)` ：1 テキストの形態素列（表層形・語彙素・品詞の上位 2 階層の `Morpheme` ）をプロセス内でキャッシュし，fold・シード・条件の間で同じチャンクを再解析しない（数値は不変）．
+- キャッシュは解析結果のみを保持し，語彙・IDF・SVD 射影行列など Train に依存する量は保持しない（データ漏洩の防止）．
+
 ---
 
 ## 5. プレゼンテーション準備と質疑応答対策ドキュメント

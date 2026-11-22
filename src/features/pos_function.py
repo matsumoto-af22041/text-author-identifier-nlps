@@ -24,8 +24,9 @@
     words      語ブロックのみ（付属語と内容語対照を，共通の品詞 2-gram ブロックに薄められずに比較するため）
     語彙の選択・各ブロックの分母は blocks によらず同一（ blocks=all の出力の列の部分集合と一致）．
 
-形態素解析の結果はテキストごとにプロセス内でキャッシュ（ `morphemes_cached` ）．解析結果は抽出器の引数に
-依存しないため，fold・シード・アブレーション条件の間で同じチャンクを再解析しない（数値は不変）．
+形態素解析の結果はテキストごとにプロセス内でキャッシュ（ `src.morphology.morphemes_cached` ，Ticket 26 で
+B・C・D に共通化）．解析結果は抽出器の引数に依存しないため，fold・シード・アブレーション条件の間で同じチャンクを
+再解析しない（数値は不変）．
 """
 
 from __future__ import annotations
@@ -34,15 +35,13 @@ import itertools
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from functools import cache
 from typing import ClassVar, Literal, Self
 
-import fugashi
 import numpy as np
 
 from src.features.base import BaseFeatureExtractor
+from src.morphology import TokenKey, morphemes_cached, morphemes_of, shared_tagger
 
-TokenKey = Literal["surface", "lemma"]
 Blocks = Literal["all", "pos_bigram", "words"]
 ALLOWED_BLOCKS: tuple[str, ...] = ("all", "pos_bigram", "words")
 
@@ -56,19 +55,6 @@ ALLOWED_TARGET_POS: tuple[frozenset[str], ...] = (FUNCTION_POS, EXTENDED_POS, CO
 
 # 総形態素数から除外する品詞（UniDic pos1，C と同じ）
 EXCLUDED_POS: frozenset[str] = frozenset({"補助記号", "空白"})
-
-
-@dataclass(frozen=True, slots=True)
-class Morpheme:
-    """1 形態素の確定済み情報（fugashi のノードは次の解析で再利用されるため即時にコピー）．"""
-
-    surface: str
-    lemma: str
-    pos1: str
-    pos2: str
-
-    def key(self, token_key: TokenKey) -> str:
-        return self.surface if token_key == "surface" else self.lemma
 
 
 @dataclass(frozen=True)
@@ -99,33 +85,6 @@ def validate_target_pos(target_pos: Iterable[str]) -> frozenset[str]:
     return pos_set
 
 
-def morphemes_of(tagger: fugashi.Tagger, text: str) -> tuple[Morpheme, ...]:
-    """形態素解析．UniDic の lemma が None の未知語は表層形で代替（第 2 回 p.16 の原形に相当）．"""
-    return tuple(
-        Morpheme(
-            surface=node.surface,
-            lemma=node.feature.lemma or node.surface,
-            pos1=node.feature.pos1,
-            pos2=node.feature.pos2,
-        )
-        for node in tagger(text)
-    )
-
-
-@cache
-def _shared_tagger() -> fugashi.Tagger:
-    return fugashi.Tagger()
-
-
-@cache
-def morphemes_cached(text: str) -> tuple[Morpheme, ...]:
-    """morphemes_of の結果をテキスト単位でキャッシュ（同じ辞書・同じテキストなら解析結果は決定的）．
-
-    キャッシュはプロセス終了まで保持（ `morphemes_cached.cache_clear()` で解放）．
-    """
-    return morphemes_of(_shared_tagger(), text)
-
-
 def top_function_words(
     texts: Sequence[str],
     n: int = 12,
@@ -139,7 +98,8 @@ def top_function_words(
     if not (isinstance(n, int) and n >= 1):
         raise ValueError(f"n は正の整数であること: {n!r}")
     pos_set = validate_target_pos(target_pos)
-    tagger = fugashi.Tagger()
+    # 作品単位の一回限りの集計のためキャッシュしない
+    tagger = shared_tagger()
     counts = Counter(m.key(token_key) for text in texts for m in morphemes_of(tagger, text) if m.pos1 in pos_set)
     if len(counts) == 0:
         raise ValueError("top_function_words: 対象品詞の語が 1 語も無い")
