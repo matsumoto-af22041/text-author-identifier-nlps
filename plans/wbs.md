@@ -21,7 +21,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
 | 008 | [lecture-aligned-core](./008-lecture-aligned-core.md) | 1 | 001 | Done |
 | 010 | [a-scale-investigation](./010-a-scale-investigation.md) | 2 | 001 | Done |
 | 002 | [feature-a-stylometry](./002-feature-a-stylometry.md) | 2 | 001, 010 | Todo |
-| 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Todo |
+| 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Done |
 | 004 | [feature-c-word-tfidf](./004-feature-c-word-tfidf.md) | 2 | 001 | Done |
 | 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Done |
 | 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008, 022 | In Progress |
@@ -127,6 +127,11 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
   - マージ前の要望：推論方式の班内での統一（スライドごとに重心法と `knn5_per_author` が混在しないこと），想定質問の未検証の説明（「残り 75% はチャンク固有の語」）の削除または仮説の明記，累積寄与率の表が間引きありの Train である旨の明記，コミットの作者名がテンプレートのまま．
   - 決定（2026-11-23）：推論方式は重心法で統一（`plans/research-context.md` の「推論方式」の代表条件，`report.md` の設定変更は 024）．ブランチは手直しなしでマージし，スライドの手直しは 007 に申し送り．
 - **024（2026-11-23 レビュー済み）**：`report.headline.classifier` を `centroid` に変更（差分は 1 行）．`smoke_024` （`base` ， $L = 500$ ，8 秒）の `report.md` の代表条件が重心法になり，特徴量比較表の Inter-work（間引きあり）の値は `summary.csv` の重心法の行と一致（作家別 MAP の平均 0.424，作家別正解率の平均 0.544）．最良モデルの選択は従来どおり k-NN を含む全推論方式から（`best_model_metric` は不変）．
+- **003（2026-11-23 レビュー済み）**：研究者の指示で Executor に委譲．`src/features/pos_function.py` を新規作成（config は 021 で設定済みのため変更なし）．検証 6 項目は実測で合格（名詞の入れ替えでコサイン 1.0，内容語対照で 0.909，混在指定 5 通りで `ValueError` ，『坊っちゃん』の上位 12 語が講義の 9 語を全て含む，実データ 4 条件で非負・有限）．検証スクリプトは scratchpad のみ．
+  - `max_features` はブロックごとに適用（品詞 2-gram は 4 条件とも 843 次元で同一）．
+  - 暫定スモーク（`smoke_003_b` ，Inter-work のみ， $L = 500$ ，未コミット状態，403 秒）の作家別 MAP の平均（間引きあり）：付属語 0.420，lemma 0.415，拡張 0.418，内容語対照 0.393．
+  - 懸念：結合ベクトルでは共通の品詞 2-gram ブロック（チャンクごとの合計 1.0）がコサインの大半を占める可能性があり，語ブロック（合計 0.46 / 0.30）の差が薄まる．付属語と内容語の差が小さいのはこのためかもしれない（仮説，二乗ノルム割合は未測定）．Core Message の比較を語ブロック単独でも行う案を研究者に提示．
+  - 懸念：fit / transform のたびに形態素解析をやり直すため，006 の全条件の実行時間が長くなる見込み．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
