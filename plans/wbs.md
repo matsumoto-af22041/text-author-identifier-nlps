@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～022．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～024．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～022．002・0
 | 002 | [feature-a-stylometry](./002-feature-a-stylometry.md) | 2 | 001, 010 | Todo |
 | 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Todo |
 | 004 | [feature-c-word-tfidf](./004-feature-c-word-tfidf.md) | 2 | 001 | Done |
-| 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Todo |
+| 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Done |
 | 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008, 022 | In Progress |
 | 009 | [presentation-lecture-alignment](./009-presentation-lecture-alignment.md) | 4 | - | Done |
 | 012 | [c-results-and-presentation](./012-c-results-and-presentation.md) | 4 | 004, 008, 009 | Done |
@@ -37,6 +37,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～022．002・0
 | 020 | [citation-removal-and-metric-names](./020-citation-removal-and-metric-names.md) | 4 | 019 | Done |
 | 021 | [member-onboarding-fixes](./021-member-onboarding-fixes.md) | 2 | - | Done |
 | 022 | [eval-pipeline-update](./022-eval-pipeline-update.md) | 3 | 014, 021 | Done |
+| 023 | [review-feature-d](./023-review-feature-d.md) | 2 | 005 | Done |
+| 024 | [headline-centroid](./024-headline-centroid.md) | 3 | 023 | Todo |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -111,6 +113,19 @@ Orchestrator の委譲対象：000・001・004・006～010・012～022．002・0
   - 値の例（C， $L = 1000$ ，Inter-work，間引きあり，重心法）：作家別正解率の平均 0.332 ± 0.028，作家別 MAP の平均 0.341 ± 0.003（基準値 0.267）．
   - 設計の変更：Intra-work の間引きの乱数を分割と独立な子乱数列に（research-context と README に反映）．`--balance-train-seeds` を廃止し設定ファイルに一本化（014 の再現と `scripts/summarize_balance.py` は `1f50178` 以前のスクリプトで行う）．計算時間の列は `timings.csv` へ移動．間引きなしの Inter-work は決定的分割のため 1 回のみ．
   - Full Experiment（ `base` ・C の全 $L$ ）は 7～10 分の見積もり．
+  - Full Experiment 実施（2026-11-18 研究者，`outputs/base_c_022/` ，コミット `08b9d47` ，`dirty: false` ，369 秒）．$L = 500$ ，`knn5_per_author` ，間引きあり（5 シード平均）：
+    - Inter-work の作家別 MAP の平均：`base` 0.424，C 0.306（基準値 0.260）．作家別正解率の平均：`base` 0.553，C 0.347（基準値 0.25）．C は Inter-work で基準値をわずかに上回るのみ．
+    - Intra-work → Inter-work の作家別 MAP の平均の低下：`base` −0.122，C −0.202．内容語の C の方が未知作品で大きく低下し，仮説の前半と整合．
+    - 間引きなしの C の Inter-work は作家別正解率の平均 0.220～0.231（$L$ 別）で基準値 0.25 を下回る．間引きありでは 0.326～0.356．
+    - Intra-work では C の作家別正解率の平均（0.934）が `base` （0.913）を上回る一方，作家別 MAP の平均は C 0.507 < `base` 0.546．MAP は同じ作家の他作品のチャンクも適合文書に含むため，同じ作品内の局所一致で上位を当てる C の強みが MAP には出にくい（解釈，006 で作家別 AP を確認）．
+    - C の Inter-work 間引きありのヒートマップでは，太宰の Test チャンクが漱石（0.040）・花袋（0.036）の重心寄りで太宰自身（0.033）が低い．『惜別』と『斜陽』の題材の差の影響と見られる（仮説）．
+    - 最良条件（`base` ， $L = 1000$ ，`knn20_per_author` ，Test で選択のため楽観的）の作家別正解率は漱石 0.415 が最低，花袋の適合率 0.322 で，間引き後は花袋への予測の流入が見られる．006 で A～D についても作家別正解率を確認．
+    - Intra-work の C の作家別正解率の平均は 5 シードで 0.934（ $L = 500$ ，`knn5_per_author` ）．README・発表資料の旧値（seed 42 の重心法の正解率 0.955 等）は 006・007 で置換．
+- **023（2026-11-22 レビュー済み）**：班員のブランチ `feat/feature-d-lsi` （005 の実装，`a000d35` ）のレビュー．`lsi_embedding.py` は 005 の仕様どおり（Train のみで TF-IDF・SVD，Fail-Fast，符号正規化，004 の再利用）．`verify_lsi_embedding.py` は全 7 項目 PASS．
+  - `review_d_L500` （`a000d35` ，`plans/` のみ dirty，149 秒）で slides_d.md の D の数値（Intra-work の作家別正解率の平均 0.957，作家別 MAP の平均 0.533，Inter-work 0.296 / 0.292，重心法）とヒートマップの値がすべて一致．C の数値も `base_c_022` と一致．
+  - $L = 1000$ の Inter-work（ $N = 100$ ）でも $K = 64$ の fit は成功（ $\sigma_{64} / \sigma_1 = 0.32$ ）．ただし累積寄与率 0.809 で低ランク近似の意味が薄れる点を考察に記載．
+  - マージ前の要望：推論方式の班内での統一（スライドごとに重心法と `knn5_per_author` が混在しないこと），想定質問の未検証の説明（「残り 75% はチャンク固有の語」）の削除または仮説の明記，累積寄与率の表が間引きありの Train である旨の明記，コミットの作者名がテンプレートのまま．
+  - 決定（2026-11-23）：推論方式は重心法で統一（`plans/research-context.md` の「推論方式」の代表条件，`report.md` の設定変更は 024）．ブランチは手直しなしでマージし，スライドの手直しは 007 に申し送り．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

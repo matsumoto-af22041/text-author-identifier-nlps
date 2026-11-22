@@ -14,6 +14,10 @@
   - 020 からの申し送り：`presentation/presentation_storyline.md` の Slide 9-10 と `qa_verification_instructions.md` の Q5 に，`c_only` の正解率の数値が名称のみ変更して残る．正解率は発表資料に載せない方針のため，作家別正解率の平均に差し替える．
   - storyline の評価データ定義と表 3～5 に，主指標（作家別 MAP の平均，作家別正解率の平均）と基準値を追加．
   - README の `delta_s_macro` の「（主指標）」は $\Delta S$ のマクロ版とミクロ版の間での主従であることが分かる表記に修正（特徴量間比較の主指標は作家別 MAP の平均）．新規の想定質問「なぜ普通の正解率を使わないのか」（Test の作家構成の偏り，正解率は結果 CSV の `accuracy` 列で回答可能）を追加．
+- 023 からの申し送り（D のブランチは手直しなしでマージ，2026-11-23）：
+  - `presentation/slides_d.md` の想定質問にある「残りの 75% には個々のチャンク固有の語が多く含まれる」は未検証のため，削除するか仮説と明記．
+  - 同ファイルの累積寄与率の表（ $K = 32$ で 0.249）に，間引きありの Train の値である旨を追記（間引きなしでは 0.216）．
+  - 全スライドの数値が代表条件の重心法（ $L = 500$ ，`plans/research-context.md` の「推論方式」）の値であることを確認し，`knn5_per_author` の値が残っていれば差し替え．
 - 想定質問ごとに，本実験の既定仕様と，対照実験に用いた切り替えフラグ（ `scaling` ， `token_key` ， `knn_mode` ， $k$ ， `n_components` ）および 006 の結果の数値を対応付け．
 
 ## Target File Paths
@@ -21,6 +25,7 @@
 - `presentation/qa_defense_matrix.md`
 - `scripts/verify_qa_points.py`
 - `presentation/presentation_storyline.md` ， `README.md` （020 からの申し送りの修正）
+- `presentation/slides_d.md` ほか班員のスライド案（023 からの申し送りの修正）
 
 ## Mandatory Constraints
 
