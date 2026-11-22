@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～024．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～025．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
 | 001 | [core-pipeline](./001-core-pipeline.md) | 1 | 000 | Done |
 | 008 | [lecture-aligned-core](./008-lecture-aligned-core.md) | 1 | 001 | Done |
 | 010 | [a-scale-investigation](./010-a-scale-investigation.md) | 2 | 001 | Done |
-| 002 | [feature-a-stylometry](./002-feature-a-stylometry.md) | 2 | 001, 010 | Todo |
+| 002 | [feature-a-stylometry](./002-feature-a-stylometry.md) | 2 | 001, 010 | Done |
 | 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Done |
 | 004 | [feature-c-word-tfidf](./004-feature-c-word-tfidf.md) | 2 | 001 | Done |
 | 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Done |
@@ -39,6 +39,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
 | 022 | [eval-pipeline-update](./022-eval-pipeline-update.md) | 3 | 014, 021 | Done |
 | 023 | [review-feature-d](./023-review-feature-d.md) | 2 | 005 | Done |
 | 024 | [headline-centroid](./024-headline-centroid.md) | 3 | 023 | Done |
+| 025 | [b-blocks](./025-b-blocks.md) | 2 | 003 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -132,6 +133,14 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
   - 暫定スモーク（`smoke_003_b` ，Inter-work のみ， $L = 500$ ，未コミット状態，403 秒）の作家別 MAP の平均（間引きあり）：付属語 0.420，lemma 0.415，拡張 0.418，内容語対照 0.393．
   - 懸念：結合ベクトルでは共通の品詞 2-gram ブロック（チャンクごとの合計 1.0）がコサインの大半を占める可能性があり，語ブロック（合計 0.46 / 0.30）の差が薄まる．付属語と内容語の差が小さいのはこのためかもしれない（仮説，二乗ノルム割合は未測定）．Core Message の比較を語ブロック単独でも行う案を研究者に提示．
   - 懸念：fit / transform のたびに形態素解析をやり直すため，006 の全条件の実行時間が長くなる見込み．
+- **025（2026-11-23 レビュー済み）**：B に `blocks` $\in$ {`all`, `pos_bigram`, `words`} を追加（`all` は `b5c2a54` の実装と 4 条件で `np.array_equal` ）．アブレーションの組合せ条件 `features.<ID>.combinations` を `run_experiments.py` に追加（「内容語対照 × `words` 」）．検証スクリプト `scripts/verify_pos_function.py` をリポジトリへ移動．
+  - 二乗ノルム割合（品詞 2-gram / 語，平均）：付属語 0.65 / 0.35（ $L$ によらずほぼ一定），内容語対照 0.874 / 0.126（ $L = 100$ ），0.934 / 0.066（500），0.949 / 0.051（1000）．内容語対照の結合版はほぼ品詞 2-gram で決まる．
+  - `smoke_025` （Inter-work， $L = 500$ ，間引きあり，125 秒）の作家別 MAP の平均：付属語 × `all` 0.420，内容語対照 × `all` 0.393，付属語 × `words` 0.367，内容語対照 × `words` 0.335，`pos_bigram` 単独 0.406（基準値 0.260）．重心法の作家別正解率の平均は付属語 × `words` 0.524，内容語対照 × `words` 0.338．語ブロック単独でも付属語が上回るが，B の主な寄与源は品詞 2-gram（仮説の確定は 006 の Intra-work を含む結果で）．
+  - チケット外の変更（承認）：形態素解析のテキスト単位キャッシュ `morphemes_cached` （数値不変を確認，403 秒 / 4 条件 → 125 秒 / 7 条件，最大 RSS 約 860MB）．006 で全 $L$ を同一プロセスで回す際のメモリを確認．
+  - README のアブレーションの説明（1 引数の差し替えのみ）が `combinations` に未対応（006 で修正）．
+- **002（2026-11-23 レビュー済み）**：研究者の指示で Executor に委譲．`src/features/stylometry_char.py` を新規作成（config は 021 で設定済み）．検証 5 項目は実測で合格（記号の手計算一致，字種構成比の和の誤差 0.0，ブロック切り替えの列一致，minmax の値域 [0, 1]）．実コーパスの全 $L$ で出力が 010 の `build_blocks` と完全一致．検証スクリプトは scratchpad のみ．
+  - 暫定スモーク（Inter-work， $L = 500$ ，未コミット状態，15 秒）の作家別 MAP の平均（間引きあり）：既定 0.471，minmax 0.400，`bigram` 0.421，`symbol` 0.371（基準値 0.260）．記号 3 次元のみでも重心法の作家別正解率の平均 0.454．
+  - 同条件の他の特徴量との比較（作家別 MAP の平均は推論方式に依存しない）：A 0.471 > `base` 0.424 > B（ `all` ）0.420 > C 0.306 > D 0.292．A が最も高く，B は `base` を上回らない．A の高さが底本の表記方針による可能性（research-context の既知の交絡リスク）と，文字 Bi-gram が付属語を含む文字列（「た。」等）を拾っている可能性（仮説）を 006 の考察で検討．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

@@ -36,7 +36,7 @@
 
 - Comply with `.claude/rules/research-coding.md` (loaded automatically).
 - 結果の JSON / CSV には実行時の設定（乱数シード，チャンク長，特徴量ハイパーパラメータ），CLI 引数，git 状態，コーパスハッシュを `run_meta.json` として併記（Experiment Traceability）．
-- 主結果表として，B の付属語（既定）と内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）の Intra-work / Inter-work 比較を `report.md` の冒頭に出力（Core Message の検証）．
+- 主結果表として，B の付属語（既定）と内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）の Intra-work / Inter-work 比較を `report.md` の冒頭に出力（Core Message の検証）．比較は `blocks=words` （語ブロック単独）を主とし，`blocks=all` （結合版）と `blocks=pos_bigram` を併記（025，2026-11-23 決定）．README のアブレーションの説明に `combinations` （複数引数の同時差し替え）を追記．B の形態素解析キャッシュ（025）による全 $L$ 実行時の最大 RSS をスモーク実行で測り報告．
 - 類似度ギャップの主指標はマクロ版 `delta_s_macro` （ミクロ版 `delta_s_micro` を併記）．Inter-work（LOWO 9 fold）の作家別正解率の平均・作家別 F 値の平均（および参考の `accuracy` ）は全 fold の混同行列を合算する Pooled Out-of-Fold で算出．同点件数・ゼロベクトル件数（008）を結果表に併記．
 - `scripts/plot_results.py` の report.md にある「全 9 fold」の固定文言を，実際の fold 数（`run_meta.json` または結果の `num_folds` ）から生成するよう修正（013 の 8 作品版で不正確になるため）．
 - 作品数の偏りの補助実験：013 で追加した `--exclude-works` により，A～D についても漱石から 1 作品ずつ除いた 3 通りを実行し，`scripts/summarize_exclusion.py` で 9 作品版との差分を報告．

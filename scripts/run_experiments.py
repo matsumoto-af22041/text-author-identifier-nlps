@@ -65,7 +65,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 @dataclass(frozen=True)
 class FeatureVariant:
-    """特徴量設定（本採用またはアブレーションで 1 引数のみ差し替えたもの）．"""
+    """特徴量設定（本採用，アブレーションで 1 引数のみ差し替えたもの，または combinations で複数引数を差し替えたもの）．"""
 
     feature: str
     name: str
@@ -110,7 +110,21 @@ def build_variants(cfg: dict[str, Any], keys: Sequence[str], with_ablation: bool
             for p, values in (spec.get("ablations") or {}).items()
             for v in values
         ]
-        return [default, *(ablations if with_ablation else [])]
+        # 複数引数の同時差し替え（例：B の内容語対照 × 語ブロックのみ，plans/025）
+        combos = spec.get("combinations") or []
+        unknown_params = sorted({p for c in combos for p in c} - set(params))
+        if unknown_params:
+            raise KeyError(f"features.{key}.combinations に params に無い引数: {unknown_params}")
+        if any(len(c) < 2 for c in combos):
+            raise ValueError(f"features.{key}.combinations の各要素は 2 引数以上（1 引数は ablations に記載）: {combos}")
+        combinations = [
+            FeatureVariant(key, f"{key}[{','.join(f'{p}={c[p]}' for p in sorted(c))}]", cls, params | c, False)
+            for c in combos
+        ]
+        names = [v.name for v in (default, *ablations, *combinations)]
+        if len(names) != len(set(names)):
+            raise ValueError(f"特徴量 {key} の条件名が重複: {names}")
+        return [default, *((ablations + combinations) if with_ablation else [])]
 
     return [v for key in keys for v in variants_of(key)]
 

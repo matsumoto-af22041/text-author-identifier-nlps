@@ -1,6 +1,6 @@
 """特徴量 B：品詞 2-gram・付属語の相対頻度（Ticket 3，講義第 2 回 p.11, p.16, p.30, p.36，第 5 回 p.11-12）．
 
-2 ブロックを結合した非負ベクトルを出力．
+2 ブロックを結合した非負ベクトルを出力（ `blocks` で片方のブロックのみの出力も可，Ticket 25）．
 
     品詞 2-gram ブロック：
         tag(m)        = (pos1, pos2)                                   （第 2 回 p.36 の品詞階層の上位 2 階層）
@@ -17,6 +17,15 @@
 語彙は Train の文書頻度 df >= min_df の要素から，ブロックごとに df 降順（同数は辞書順）で上位
 `max_features` 件を選択．ブロックごとに上限を課すのは，内容語対照条件で語彙数の多い内容語が品詞 2-gram
 の枠を奪い，「同じ品詞 2-gram ブロック」という統制が崩れるのを防ぐため．
+
+`blocks`（Ticket 25）：
+    all        [品詞 2-gram | 語] の結合（既定）
+    pos_bigram 品詞 2-gram ブロックのみ（ `target_pos` ・ `token_key` は出力に影響しない）
+    words      語ブロックのみ（付属語と内容語対照を，共通の品詞 2-gram ブロックに薄められずに比較するため）
+    語彙の選択・各ブロックの分母は blocks によらず同一（ blocks=all の出力の列の部分集合と一致）．
+
+形態素解析の結果はテキストごとにプロセス内でキャッシュ（ `morphemes_cached` ）．解析結果は抽出器の引数に
+依存しないため，fold・シード・アブレーション条件の間で同じチャンクを再解析しない（数値は不変）．
 """
 
 from __future__ import annotations
@@ -25,7 +34,7 @@ import itertools
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cache
 from typing import ClassVar, Literal, Self
 
 import fugashi
@@ -34,6 +43,8 @@ import numpy as np
 from src.features.base import BaseFeatureExtractor
 
 TokenKey = Literal["surface", "lemma"]
+Blocks = Literal["all", "pos_bigram", "words"]
+ALLOWED_BLOCKS: tuple[str, ...] = ("all", "pos_bigram", "words")
 
 # 付属語（第 2 回 p.11）
 FUNCTION_POS: frozenset[str] = frozenset({"助詞", "助動詞"})
@@ -47,7 +58,7 @@ ALLOWED_TARGET_POS: tuple[frozenset[str], ...] = (FUNCTION_POS, EXTENDED_POS, CO
 EXCLUDED_POS: frozenset[str] = frozenset({"補助記号", "空白"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Morpheme:
     """1 形態素の確定済み情報（fugashi のノードは次の解析で再利用されるため即時にコピー）．"""
 
@@ -101,6 +112,20 @@ def morphemes_of(tagger: fugashi.Tagger, text: str) -> tuple[Morpheme, ...]:
     )
 
 
+@cache
+def _shared_tagger() -> fugashi.Tagger:
+    return fugashi.Tagger()
+
+
+@cache
+def morphemes_cached(text: str) -> tuple[Morpheme, ...]:
+    """morphemes_of の結果をテキスト単位でキャッシュ（同じ辞書・同じテキストなら解析結果は決定的）．
+
+    キャッシュはプロセス終了まで保持（ `morphemes_cached.cache_clear()` で解放）．
+    """
+    return morphemes_of(_shared_tagger(), text)
+
+
 def top_function_words(
     texts: Sequence[str],
     n: int = 12,
@@ -132,6 +157,7 @@ class POSFunctionExtractor(BaseFeatureExtractor):
         target_pos: Sequence[str] = ("助詞", "助動詞"),
         max_features: int = 1500,
         min_df: int = 1,
+        blocks: Blocks = "all",
     ) -> None:
         if token_key not in ("surface", "lemma"):
             raise ValueError(f"token_key は 'surface' または 'lemma': {token_key!r}")
@@ -139,21 +165,20 @@ class POSFunctionExtractor(BaseFeatureExtractor):
             raise ValueError(f"max_features は正の整数であること: {max_features!r}")
         if not (isinstance(min_df, int) and min_df >= 1):
             raise ValueError(f"min_df は正の整数であること: {min_df!r}")
+        if blocks not in ALLOWED_BLOCKS:
+            raise ValueError(f"blocks は {list(ALLOWED_BLOCKS)} のいずれか: {blocks!r}")
         self.token_key: TokenKey = token_key
         # config のリストを共有するため書き換えず，不変な tuple / frozenset で保持
         self.target_pos: tuple[str, ...] = tuple(target_pos)
         self.target_pos_set: frozenset[str] = validate_target_pos(self.target_pos)
         self.max_features = max_features
         self.min_df = min_df
-
-    @cached_property
-    def tagger(self) -> fugashi.Tagger:
-        return fugashi.Tagger()
+        self.blocks: Blocks = blocks
 
     # ---- 形態素解析 ----
 
     def analyze(self, text: str) -> POSAnalyzedText:
-        morphs = morphemes_of(self.tagger, text)
+        morphs = morphemes_cached(text)
         tags = [f"{m.pos1}-{m.pos2}" for m in morphs]
         pos_bigrams = tuple(f"{prev}|{cur}" for prev, cur in zip(tags, tags[1:], strict=False))
         num_morphemes = sum(m.pos1 not in EXCLUDED_POS for m in morphs)
@@ -214,7 +239,9 @@ class POSFunctionExtractor(BaseFeatureExtractor):
         analyzed = self.analyze_all(train_texts)
         self.bigram_vocab_: dict[str, int] = self.select_vocabulary([a.pos_bigrams for a in analyzed])
         self.word_vocab_: dict[str, int] = self.select_vocabulary([a.words for a in analyzed])
-        if len(self.bigram_vocab_) == 0 or len(self.word_vocab_) == 0:
+        if (self.blocks != "words" and len(self.bigram_vocab_) == 0) or (
+            self.blocks != "pos_bigram" and len(self.word_vocab_) == 0
+        ):
             raise ValueError(
                 f"{type(self).__name__}.fit: 語彙が空（品詞 2-gram {len(self.bigram_vocab_)} 件，"
                 f"語 {len(self.word_vocab_)} 件，min_df={self.min_df}）"
@@ -231,15 +258,31 @@ class POSFunctionExtractor(BaseFeatureExtractor):
         self.num_word_features_: int = len(self.word_vocab_)
         return self
 
+    @property
+    def num_output_features_(self) -> int:
+        """blocks に応じた transform 出力の列数．"""
+        return {
+            "all": self.num_bigram_features_ + self.num_word_features_,
+            "pos_bigram": self.num_bigram_features_,
+            "words": self.num_word_features_,
+        }[self.blocks]
+
     def transform(self, texts: Sequence[str]) -> np.ndarray:
         analyzed = self.analyze_all(texts)
-        # shape: (n_texts, |V_bigram| + |V_word|)
-        X = np.hstack([self.bigram_block(analyzed), self.word_block(analyzed)])
-        assert X.shape == (len(texts), self.num_bigram_features_ + self.num_word_features_)
+        parts = {
+            "all": (self.bigram_block, self.word_block),
+            "pos_bigram": (self.bigram_block,),
+            "words": (self.word_block,),
+        }[self.blocks]
+        # shape: (n_texts, num_output_features_)
+        X = np.hstack([block(analyzed) for block in parts])
+        assert X.shape == (len(texts), self.num_output_features_)
         assert np.all(X >= 0) and np.all(np.isfinite(X))
         return X
 
     def split_blocks(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """transform 出力を (品詞 2-gram ブロック, 語ブロック) に分割．"""
+        """blocks=all の transform 出力を (品詞 2-gram ブロック, 語ブロック) に分割．"""
+        if self.blocks != "all":
+            raise ValueError(f"split_blocks は blocks='all' の出力のみ対象: blocks={self.blocks!r}")
         assert X.ndim == 2 and X.shape[1] == self.num_bigram_features_ + self.num_word_features_
         return X[:, : self.num_bigram_features_], X[:, self.num_bigram_features_ :]

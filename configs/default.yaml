@@ -79,6 +79,7 @@ evaluation:
 #   class：モジュールパス.クラス名（BaseFeatureExtractor のサブクラス）
 #   params：コンストラクタ引数（本採用仕様）．キー名は各モジュールの __init__ 引数と一致させること
 #   ablations：--ablation 指定時に 1 引数ずつ差し替えて追加実行する値（本採用値は含めない）
+#   combinations：--ablation 指定時に複数引数を同時に差し替えて追加実行する条件の組（任意，各要素は params の部分辞書）
 features:
     base:
         description: 文字 unigram 相対頻度（ベースライン）
@@ -93,8 +94,10 @@ features:
     B:
         description: 品詞 2-gram・付属語（助詞・助動詞）の相対頻度（plans/003）
         class: src.features.pos_function.POSFunctionExtractor
-        params: {token_key: surface, target_pos: [助詞, 助動詞], max_features: 1500}
-        ablations: {token_key: [lemma], target_pos: [[助詞, 助動詞, 接続詞, 連体詞, 感動詞], [名詞, 動詞, 形容詞]]}
+        params: {token_key: surface, target_pos: [助詞, 助動詞], max_features: 1500, blocks: all}
+        ablations: {token_key: [lemma], target_pos: [[助詞, 助動詞, 接続詞, 連体詞, 感動詞], [名詞, 動詞, 形容詞]], blocks: [pos_bigram, words]}
+        # 内容語対照 × 語ブロックのみ（Core Message の主結果表の統制比較，plans/025）
+        combinations: [{target_pos: [名詞, 動詞, 形容詞], blocks: words}]
     C:
         description: 内容語（名詞・動詞・形容詞）の TF-IDF（plans/004）
         class: src.features.word_tfidf.WordTFIDFExtractor
