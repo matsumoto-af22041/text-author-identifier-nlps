@@ -121,7 +121,7 @@ report:
     headline:
         chunk_chars: 500
         similarity: cosine
-        classifier: knn5_per_author
+        classifier: centroid
     # 最良モデル選択の基準（Inter-work の Pooled 指標のシード平均，本採用の特徴量設定のみ対象）
     best_model_metric: balanced_accuracy
     num_misclassified_examples: 20

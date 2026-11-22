@@ -38,7 +38,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
 | 021 | [member-onboarding-fixes](./021-member-onboarding-fixes.md) | 2 | - | Done |
 | 022 | [eval-pipeline-update](./022-eval-pipeline-update.md) | 3 | 014, 021 | Done |
 | 023 | [review-feature-d](./023-review-feature-d.md) | 2 | 005 | Done |
-| 024 | [headline-centroid](./024-headline-centroid.md) | 3 | 023 | Todo |
+| 024 | [headline-centroid](./024-headline-centroid.md) | 3 | 023 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -126,6 +126,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～024．002・0
   - $L = 1000$ の Inter-work（ $N = 100$ ）でも $K = 64$ の fit は成功（ $\sigma_{64} / \sigma_1 = 0.32$ ）．ただし累積寄与率 0.809 で低ランク近似の意味が薄れる点を考察に記載．
   - マージ前の要望：推論方式の班内での統一（スライドごとに重心法と `knn5_per_author` が混在しないこと），想定質問の未検証の説明（「残り 75% はチャンク固有の語」）の削除または仮説の明記，累積寄与率の表が間引きありの Train である旨の明記，コミットの作者名がテンプレートのまま．
   - 決定（2026-11-23）：推論方式は重心法で統一（`plans/research-context.md` の「推論方式」の代表条件，`report.md` の設定変更は 024）．ブランチは手直しなしでマージし，スライドの手直しは 007 に申し送り．
+- **024（2026-11-23 レビュー済み）**：`report.headline.classifier` を `centroid` に変更（差分は 1 行）．`smoke_024` （`base` ， $L = 500$ ，8 秒）の `report.md` の代表条件が重心法になり，特徴量比較表の Inter-work（間引きあり）の値は `summary.csv` の重心法の行と一致（作家別 MAP の平均 0.424，作家別正解率の平均 0.544）．最良モデルの選択は従来どおり k-NN を含む全推論方式から（`best_model_metric` は不変）．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
