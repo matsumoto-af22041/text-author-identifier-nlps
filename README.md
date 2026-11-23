@@ -101,7 +101,7 @@ uv run python scripts/inspect_and_extract_corpus.py
   - Test 作家だけ Train の作品数が 1 つ少ない構造的な非対称あり（013）．
 - **トピック漏洩**：同じ作品のチャンクは題材・登場人物・底本の表記を共有して互いに独立でないため，同じ作品のチャンクが Train と Test に分かれると，文体ではなく作品の一致で識別できてしまい精度が過大に出ること．例：『坊っちゃん』の「山嵐」が Train と Test の両方に現れ，内容の一致で著者が当たる．Intra-work で生じ，Intra-work の精度は「同じ作品を見分けた」効果を含む．
 - **Intra-work / Inter-work の両方を評価する理由**：両者の差がトピック漏洩の大きさを示すため．Inter-work が「未知の作品の著者を当てる」という本来の問いに対応し，Intra-work はその比較対象．
-  - 例：C（内容語 TF-IDF）の $L = 500$ 重心法の正解率は Intra-work 0.955，Inter-work 0.351（ `c_only` ．Intra-work は `seed=42` の 1 回分割による暫定値で，5 シード化は 006）．同じ作品内の語彙の一致は，同じ作家の別作品には持ち越されない．
+  - 例：C（内容語 TF-IDF）の $L = 500$ 重心法の作家別正解率の平均は，間引きありで Intra-work 0.966 ± 0.010，Inter-work 0.342 ± 0.014（5 シードの平均 ± 標準偏差），間引きなしで Intra-work 0.965 ± 0.014，Inter-work 0.266（基準値はいずれも 0.25， `base_c_022` ．006 の同条件の再実行と一致）．同じ作品内の語彙の一致は，同じ作家の別作品には持ち越されない．
 
 ### Train チャンク数の作家間均等化（間引き）
 
@@ -126,7 +126,7 @@ uv run python scripts/inspect_and_extract_corpus.py
 - **$\mu_{\text{same}}$ ， $\mu_{\text{diff}}$ ， $\Delta S$**（独自設計）：Test チャンクと Train チャンクのペアのうち，同一著者ペアの平均類似度 $\mu_{\text{same}}$ ，異著者ペアの平均類似度 $\mu_{\text{diff}}$ ，その差 $\Delta S = \mu_{\text{same}} - \mu_{\text{diff}}$ （類似度ギャップ）． $\Delta S$ が正で大きいほど，類似度が本人と他人を分けている．
   - `delta_s_macro` （ $\Delta S$ のマクロ版とミクロ版のうちの主．特徴量間比較の主指標は作家別 MAP の平均）：4×4 作家間平均類似度行列の対角 4 要素の平均と非対角 12 要素の平均の差．ペア数の多い漱石に引きずられない．
   - `delta_s_micro` （併記）：全ペアを 1 件ずつ平均したミクロ版．チャンク数の多い作家ほど重みが大きい．
-  - 例：C の $L = 500$ の `delta_s_macro` は Intra-work 0.0316（暫定），Inter-work 0.0057（ `c_only` ）．
+  - 例：C の $L = 500$ の `delta_s_macro` は，間引きありで Intra-work 0.0310，Inter-work 0.0053，間引きなしで Intra-work 0.0325，Inter-work 0.0057（ `base_c_022` ，Intra-work と間引きありは 5 シード平均）．
   - 位置付け： $\Delta S$ は類似度の値の分布に依存する（例：C は類似度が 0.02～0.06 に集中）ため，特徴量間の比較には使わず，同一特徴量内の比較（チャンク長別等）に限定．
 - **AP**：各 Test チャンクを検索質問，同一著者の Train チャンクを適合文書とし，その fold・シードの Train チャンク全件をコサイン類似度の降順に並べたときの $\text{AP} = \frac{1}{R} \sum_{k : \text{rel}(k)} P@k$ （ $R$ は適合文書数， $P@k$ は上位 $k$ 件の適合率）．第 5 回 p.31 の AP を参考にした独自設計．同じ類似度の同順位は悲観的順位（適合文書を非適合文書の後ろに置く）．
   - 分母を適合文書数とする理由：講義スライドの分母（出力文書数 $N_{\text{out}}$ ）も本研究の分母も「完全な並びで分子が取りうる最大値」 $\min(R, N_{\text{out}})$ と解釈できる．講義は適合文書が出力件数以上ある場面（ $R \ge N_{\text{out}}$ ），本研究は Train 全件を出力しラベルで $R$ が既知の場面（ $R < N_{\text{out}}$ ）に当たる．講義の式のままでは完全な並びでも $R / N_{\text{out}}$ （間引きありで 0.25）が上限．
@@ -147,7 +147,9 @@ uv run python scripts/inspect_and_extract_corpus.py
 ### 実験条件
 
 - **本採用（既定）**：各特徴量の採用仕様．`configs/default.yaml` の `features.<特徴量 ID>.params` ．主結果はこの設定で報告．
-- **アブレーション**：本採用から 1 引数だけ差し替えた比較条件．`configs/default.yaml` の `features.<特徴量 ID>.ablations` に列挙し， `scripts/run_experiments.py` の `--ablation` で追加実行．例：A の `scaling=minmax` ，B の内容語対照 `target_pos=[名詞, 動詞, 形容詞]` ，D の `n_components` $\in \{8, 16, 64\}$ ．
+- **アブレーション**：本採用から 1 引数だけ差し替えた比較条件．`configs/default.yaml` の `features.<特徴量 ID>.ablations` に列挙し， `scripts/run_experiments.py` の `--ablation` で追加実行（実行するチャンク長は `experiment.ablation_chunk_chars` ）．例：A の `scaling=minmax` ，B の内容語対照 `target_pos=[名詞, 動詞, 形容詞]` ，D の `n_components` $\in \{8, 16, 64\}$ ．
+  - 複数の引数を同時に差し替える条件は `features.<特徴量 ID>.combinations` に `params` の部分辞書（2 引数以上）として列挙し，同じく `--ablation` で追加実行．例：B の内容語対照 × 語ブロックのみ `{target_pos: [名詞, 動詞, 形容詞], blocks: words}` （ `plans/025-b-blocks.md` ）．
+  - `report.md` 冒頭の主結果表（B の付属語 vs 内容語対照，設定キー `report.core_comparison` ）は，これらの条件から `blocks` $\in$ {`words`, `all`, `pos_bigram`} ごとに付属語と内容語対照の組を `params` で照合して作成（ `words` が主）．
 - **ベースライン `base`**：文字 unigram（1 文字）の相対頻度（出現回数 ÷ 総文字数）．`src/features/char_unigram.py` の `CharUnigramExtractor` （設定キー `features.base` ）．A～D の比較の基準．
 
 ---

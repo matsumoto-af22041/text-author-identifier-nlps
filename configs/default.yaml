@@ -114,7 +114,7 @@ experiment:
     # 既定で実行する特徴量（--features で上書き可能）
     features: [A, B, C, D]
     splits: [intra, inter]
-    # アブレーションを実行するチャンク長
+    # アブレーション（ablations・combinations）を実行するチャンク長（report.headline.chunk_chars と一致させる）
     ablation_chunk_chars: [500]
     output_dir: outputs
 
@@ -127,5 +127,15 @@ report:
         classifier: centroid
     # 最良モデル選択の基準（Inter-work の Pooled 指標のシード平均，本採用の特徴量設定のみ対象）
     best_model_metric: balanced_accuracy
+    # report.md 冒頭の主結果表（Core Message：B の付属語 vs 内容語対照，plans/006，plans/025）
+    #   本採用の params から param と blocks だけを差し替えた条件を照合（--ablation で
+    #   experiment.ablation_chunk_chars のチャンク長に生成される．headline.chunk_chars を含めること）
+    #   blocks の先頭が主（語ブロック単独），以降は併記．pos_bigram は target_pos が出力に影響しないため付属語側の 1 行のみ
+    core_comparison:
+        feature: B
+        param: target_pos
+        function_words: [助詞, 助動詞]
+        content_words: [名詞, 動詞, 形容詞]
+        blocks: [words, all, pos_bigram]
     num_misclassified_examples: 20
     excerpt_chars: 120

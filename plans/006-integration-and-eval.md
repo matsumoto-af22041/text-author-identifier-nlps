@@ -31,6 +31,7 @@
 - `src/evaluator.py` （MAP の追加）
 - `README.md` （「実験用語の定義」の MAP と設定キー名）
 - `configs/default.yaml` （ `features` ， `experiment` ， `report` セクション）
+- `scripts/verify_stylometry_char.py` （新規）
 
 ## Mandatory Constraints
 
@@ -43,7 +44,8 @@
 - 重心の割り増しの実測：A～D についても `scripts/measure_centroid_norm.py` （015）を実行し，作家別の $\bar{\rho}_a$ と $1 / \|\hat{c}_a\|$ を報告．
 - MRR は悲観的順位（008）のため，`knn_mode="global"` では上位 $k$ 外の作家の同点で値が低く出る． `report.md` の MRR の考察は重心法と `per_author` を主とし，global の MRR にはその旨を注記．
 - 008 以前の出力（`outputs/smoke_base/` 等，混同行列が (C, C) の旧形式）は新しい `plot_results.py` で読めないため，再実行で作り直すこと．
-- `report.md` の各図表に，使用した数式の出典（講義資料の回・頁または `plans/research-context.md` の文献）を 1 行で併記．
+- `report.md` の各図表に，使用した数式の出典（講義資料の回・頁，または `plans/research-context.md` の「講義資料で補えない箇所（独自設計）」）を 1 行で併記．
+- 002 の検証スクリプト（scratchpad にあり未コミット）に相当するものを `scripts/verify_stylometry_char.py` としてリポジトリに置き，002 の Verification Criteria を再実行できるようにする．
 - 生成物は `outputs/` （git 管理外）に出力．
 
 ## Verification Criteria
