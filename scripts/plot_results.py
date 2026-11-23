@@ -1,9 +1,12 @@
 """実験結果ディレクトリから図表と report.md を生成．
 
 使い方：
-    uv run python scripts/plot_results.py outputs/<run_name>
+    uv run python scripts/plot_results.py outputs/<run_name> [--out-dir outputs/<new_dir>] [--config configs/default.yaml]
 
 図表の代表条件は実行時の設定（run_meta.json 内の config.report.headline）に従う．
+図の日本語フォント（report.font_candidates）と作家の表示名（report.author_labels）は --config の設定に従う
+（実験の再実行なしに既存 run の図だけを再生成できるよう，run 時の設定ではなく現在の設定から読む）．
+--out-dir を指定すると report.md・表 CSV・図をそのディレクトリに書き出し，run_dir は読み取りのみ．
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -22,14 +26,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import yaml  # noqa: E402
+from matplotlib import font_manager  # noqa: E402
 
-from src.evaluator import (  # noqa: E402
-    SimilarityStats,
-    plot_author_similarity_matrix,
-    plot_confusion_matrix,
-    plot_similarity_distribution,
-)
+from src.evaluator import SimilarityStats  # noqa: E402
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 Row = dict[str, Any]
 
 
@@ -59,6 +61,55 @@ def slug(s: str) -> str:
 BAL_LABEL = {True: "あり", False: "なし"}
 BAL_TAG = {True: "bal", False: "nobal"}
 
+# ---------------------------------------------------------------- 図の表記（README「実験用語の定義」の用語）
+
+SPLIT_LABEL = {"intra": "作品内分割（Intra-work）", "inter": "作品間分割（Inter-work）"}
+SIM_LABEL = {"cosine": "コサイン類似度"}
+METRIC_LABEL = {
+    "delta_s_macro": "$\\Delta S$（マクロ）",
+    "map_macro": "作家別 MAP の平均",
+    "balanced_accuracy": "作家別正解率の平均",
+    "macro_f1": "作家別 F 値の平均",
+}
+BLOCKS_LABEL = {"words": "語ブロック", "all": "結合"}
+CHUNK_AXIS_LABEL = "チャンク長 $L$（文字）"
+KNN_NAME = re.compile(r"^knn(\d+)_(per_author|global)$")
+KNN_MODE_LABEL = {"per_author": "作家別上位 $k$ 平均", "global": "全体上位 $k$ の重み付き投票"}
+
+
+def clf_label(clf: str) -> str:
+    """推論方式の名前（centroid，knn{k}_{mode}）を研究の用語に変換．未知の名前は停止．"""
+    if clf == "centroid":
+        return "重心法"
+    m = KNN_NAME.fullmatch(clf)
+    if m is None:
+        raise ValueError(f"推論方式の表記が未定義: {clf}")
+    return f"{KNN_MODE_LABEL[m.group(2)]}（$k = {m.group(1)}$）"
+
+
+def setup_font(candidates: Sequence[str]) -> str:
+    """matplotlib に登録済みのフォントから候補を先頭順に照合し，最初に見つかったものを既定にする．無ければ停止．"""
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    found = next((c for c in candidates if c in available), None)
+    if found is None:
+        raise RuntimeError(f"report.font_candidates {list(candidates)} のフォントがこの環境に無い（日本語が豆腐文字になるため停止）")
+    plt.rcParams["font.family"] = found
+    return found
+
+
+class FigureStyle:
+    """--config から読む図の表記：日本語フォントと作家の表示名．"""
+
+    def __init__(self, config_path: Path, author_ids: Sequence[str]) -> None:
+        rc = yaml.safe_load(config_path.read_text(encoding="utf-8"))["report"]
+        labels: dict[str, str] = rc["author_labels"]
+        missing = [a for a in author_ids if a not in labels]
+        if missing:
+            raise KeyError(f"report.author_labels に無い作家: {missing}")
+        self.config_path = config_path
+        self.font = setup_font(rc["font_candidates"])
+        self.authors = [labels[a] for a in author_ids]
+
 # 各図表に使用した数式の出典（講義資料の回・頁，または独自設計）
 SOURCE = {
     "cosine": "コサイン係数：第 5 回 p.26，第 3 回 p.25",
@@ -78,8 +129,10 @@ def source_line(*keys: str) -> list[str]:
 
 
 class Results:
-    def __init__(self, run_dir: Path) -> None:
+    def __init__(self, run_dir: Path, out_dir: Path, config_path: Path) -> None:
         self.run_dir = run_dir
+        # report.md・表 CSV・図の書き出し先（run_dir と同じなら従来どおり上書き）
+        self.out_dir = out_dir
         self.meta = json.loads((run_dir / "run_meta.json").read_text(encoding="utf-8"))
         data = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
         self.best_key: str | None = data["best_key"]
@@ -91,6 +144,7 @@ class Results:
         }
         self.cfg = self.meta["config"]
         self.authors: list[str] = self.meta["author_ids"]
+        self.style = FigureStyle(config_path, self.authors)
         # 表・図はシード平均の行（row_type=mean）のみを用いる
         self.mean_rows = [r for r in self.rows if r["row_type"] == "mean"]
 
@@ -117,6 +171,80 @@ def pm(r: Row, col: str, digits: int = 3) -> str:
     return f"{fmt(r[col], digits)} ± {fmt(std, digits)}" if has_std else fmt(r[col], digits)
 
 
+# ---------------------------------------------------------------- 図（src/evaluator.py の plot_* と同じ描画データ，表記のみ日本語）
+
+
+def save_fig(fig: plt.Figure, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
+def plot_confusion_ja(cm: np.ndarray, labels: Sequence[str], path: Path, title: str) -> None:
+    """混同行列 (C, C + 1)．最右列は同点（判別不能）．src.evaluator.plot_confusion_matrix と同じ描画データ．"""
+    C = len(labels)
+    if cm.shape != (C, C + 1):
+        raise ValueError(f"混同行列の形状 {cm.shape} が (C, C + 1) = ({C}, {C + 1}) ではない")
+    fig, ax = plt.subplots(figsize=(5.6, 4.2))
+    im = ax.imshow(cm, cmap="Blues")
+    fig.colorbar(im, ax=ax)
+    ax.set(xticks=range(C + 1), yticks=range(C), xticklabels=[*labels, "同点"], yticklabels=labels)
+    # 同点列の境界線
+    ax.axvline(C - 0.5, color="gray", linewidth=1.0, linestyle="--")
+    ax.set(xlabel="判定作家", ylabel="正解作家")
+    ax.set_title(title, fontsize=9)
+    threshold = cm.max() / 2
+    [
+        ax.text(j, i, int(cm[i, j]), ha="center", va="center", color="white" if cm[i, j] > threshold else "black")
+        for i in range(cm.shape[0])
+        for j in range(cm.shape[1])
+    ]
+    save_fig(fig, path)
+
+
+def plot_author_matrix_ja(A: np.ndarray, labels: Sequence[str], path: Path, title: str) -> None:
+    """4×4 作家間平均類似度行列 (照会作家, 登録作家)．src.evaluator.plot_author_similarity_matrix と同じ描画データ．"""
+    fig, ax = plt.subplots(figsize=(4.8, 4.2))
+    im = ax.imshow(np.ma.masked_invalid(A), cmap="viridis")
+    fig.colorbar(im, ax=ax)
+    ax.set(xticks=range(len(labels)), yticks=range(len(labels)), xticklabels=labels, yticklabels=labels)
+    ax.set(xlabel="登録（Train）作家", ylabel="照会（Test）作家")
+    ax.set_title(title, fontsize=9)
+    # viridis は高値側が明るいため，正規化値 0.6 超のセルは黒文字
+    norm = im.norm
+    [
+        ax.text(j, i, f"{A[i, j]:.3f}", ha="center", va="center", color="black" if norm(A[i, j]) > 0.6 else "white", fontsize=8)
+        for i in range(A.shape[0])
+        for j in range(A.shape[1])
+        if np.isfinite(A[i, j])
+    ]
+    save_fig(fig, path)
+
+
+def plot_similarity_distribution_ja(stats: SimilarityStats, path: Path, title: str) -> None:
+    """同一著者・異著者ペアの類似度分布（密度正規化ヒストグラム）と近似分位点の箱ひげ図．
+    src.evaluator.plot_similarity_distribution と同じ描画データ．"""
+    edges = stats.bin_edges
+    widths = np.diff(edges)
+    density = lambda h: h / (h.sum() * widths)  # noqa: E731
+    fig, (ax_h, ax_b) = plt.subplots(1, 2, figsize=(9, 3.6), gridspec_kw={"width_ratios": [3, 1]})
+    ax_h.stairs(density(stats.hist_same), edges, fill=True, alpha=0.5, label=f"同一著者ペア（平均 {stats.mu_same:.3f}）")
+    ax_h.stairs(density(stats.hist_diff), edges, fill=True, alpha=0.5, label=f"異著者ペア（平均 {stats.mu_diff:.3f}）")
+    ax_h.set(xlabel="類似度", ylabel="密度")
+    ax_h.set_title(f"{title}\n$\\Delta S$（マクロ）= {stats.delta_s_macro:.3f}，$\\Delta S$（ミクロ）= {stats.delta_s_micro:.3f}", fontsize=10)
+    ax_h.legend()
+    ax_b.bxp(
+        [
+            {"label": name, "whislo": q[0], "q1": q[1], "med": q[2], "q3": q[3], "whishi": q[4], "fliers": []}
+            for name, q in (("同一著者", stats.quantiles_same), ("異著者", stats.quantiles_diff))
+        ],
+        showfliers=False,
+    )
+    ax_b.set(ylabel="類似度", title="近似四分位")
+    save_fig(fig, path)
+
+
 # ---------------------------------------------------------------- 各セクション
 
 
@@ -134,6 +262,8 @@ def section_overview(res: Results, headline: dict[str, Any]) -> list[str]:
     return [
         f"# 実験結果レポート：`{res.run_dir.name}`",
         "",
+        *([f"- 図表の再生成：run `{res.run_dir.name}` の出力から図・表・本レポートのみを `{res.out_dir.name}` に再生成（実験の再実行なし）"] if res.out_dir.resolve() != res.run_dir.resolve() else []),
+        f"- 図のフォント：{res.style.font}（`{res.style.config_path.name}` の `report.font_candidates` から選択）",
         f"- 実行：{m['started_at']} 〜 {m.get('finished_at', '—')}（{m.get('elapsed_seconds', '—')} 秒）",
         f"- git：`{m['git']['commit'][:10]}`" + ("（**未コミットの変更あり**）" if m["git"]["dirty"] else ""),
         f"- コーパス SHA-256：`{m['corpus']['source_sha256'][:16]}…`",
@@ -238,7 +368,7 @@ def section_core(res: Results, h: dict[str, Any], fig_dir: Path) -> list[str]:
         for blocks, L, split, bal, f, c in found
     ]
     write_rows(
-        res.run_dir / "table_core_comparison.csv",
+        res.out_dir / "table_core_comparison.csv",
         ["blocks", "chunk_chars", "split", "balance_train", "word_type", "variant", "n_seeds", *[x for col in (*CORE_COLS, "map_macro_random") for x in (col, f"{col}_std")]],
         [
             [blocks, L, split, bal, kind, r["variant"], r["n_seeds"], *[r[x] for col in (*CORE_COLS, "map_macro_random") for x in (col, f"{col}_std")]]
@@ -284,7 +414,6 @@ def core_chunk_length(res: Results, cs: CoreSpec, h: dict[str, Any], Ls: list[in
     blocks = [b for b in cs.blocks if b != "pos_bigram"]
     bal = res.balances[0]
     fig, axes = plt.subplots(len(CORE_COLS), len(splits), figsize=(4.6 * len(splits), 3.0 * len(CORE_COLS)), squeeze=False)
-    labels = {"map_macro": "MAP (per-author mean)", "balanced_accuracy": "Balanced accuracy", "macro_f1": "Macro-F1"}
     for col, ax_row in zip(CORE_COLS, axes, strict=True):
         for split, ax in zip(splits, ax_row, strict=True):
             for b in blocks:
@@ -294,10 +423,10 @@ def core_chunk_length(res: Results, cs: CoreSpec, h: dict[str, Any], Ls: list[in
                         x, y, e = zip(*pts, strict=True)
                         err = [0.0 if (v is None or math.isnan(v)) else v for v in e]
                         main = b == blocks[0]
-                        ax.errorbar(x, y, yerr=err, marker="o" if main else "s", linestyle="-" if main else ":", capsize=3, color=color, label=f"{'function' if kind == 'func' else 'content'} / {b}")
+                        ax.errorbar(x, y, yerr=err, marker="o" if main else "s", linestyle="-" if main else ":", capsize=3, color=color, label=f"{CORE_LABEL[kind]}・{BLOCKS_LABEL[b]}")
             if col == "balanced_accuracy":
-                ax.axhline(0.25, color="gray", linewidth=0.8)
-            ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel="Chunk length L (chars)", ylabel=labels[col], title=f"{split} / {BAL_TAG[bal]} / {clf}")
+                ax.axhline(0.25, color="gray", linewidth=0.8, label="基準値")
+            ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel=CHUNK_AXIS_LABEL, ylabel=METRIC_LABEL[col], title=f"{SPLIT_LABEL[split]}，間引き{BAL_LABEL[bal]}，{clf_label(clf)}")
             ax.minorticks_off()
             ax.grid(alpha=0.3)
             ax.legend(fontsize=7)
@@ -371,7 +500,7 @@ def core_per_work(res: Results, cs: CoreSpec, h: dict[str, Any]) -> list[str]:
             csv_rows.append([L, work, titles.get(work, work), n.pop(), *[vals[(k, col)].mean() for col, _ in metrics for k in ("func", "cont")], *[vals[(k, col)].std(ddof=1) for col, _ in metrics for k in ("func", "cont")]])
         wins.append([L, len(fold_names), *[f"{sum(d > 0 for d in diffs[col])} / {len(fold_names)}" for col, _ in metrics], *[f"{sum(d == 0 for d in diffs[col])}" for col, _ in metrics]])
     write_rows(
-        res.run_dir / "table_core_per_work.csv",
+        res.out_dir / "table_core_per_work.csv",
         ["chunk_chars", "work_id", "title", "n_seeds", *[f"{col}_{k}" for col, _ in metrics for k in ("function", "content")], *[f"{col}_{k}_std" for col, _ in metrics for k in ("function", "content")]],
         csv_rows,
     )
@@ -442,7 +571,7 @@ def section_main_table(res: Results, h: dict[str, Any], features: list[str]) -> 
         if (a := res.get(f, L, "intra", bal, sim, clf)) is not None and (b := res.get(f, L, "inter", bal, sim, clf)) is not None
     ]
     write_rows(
-        res.run_dir / "table_main_comparison.csv",
+        res.out_dir / "table_main_comparison.csv",
         ["feature", "split", "balance_train", "n_seeds", *[x for c in (*MAIN_COLS, *SIM_COLS) for x in (c, f"{c}_std")]],
         [[f, split, bal, r["n_seeds"], *[r[x] for c in (*MAIN_COLS, *SIM_COLS) for x in (c, f"{c}_std")]] for f, split, bal, r in found],
     )
@@ -489,19 +618,15 @@ def section_distributions(res: Results, h: dict[str, Any], features: list[str], 
                 if st is None:
                     continue
                 base = slug(f"{f}_L{L}_{split}_{BAL_TAG[bal]}_{sim}")
-                title = f"{f} / {split} / {BAL_TAG[bal]} / L={L} / {sim}"
-                plot_similarity_distribution(st, fig_dir / f"dist_{base}.png", title=title)
-                plot_author_similarity_matrix(st.author_matrix, res.authors, fig_dir / f"heatmap_{base}.png", title=title)
+                cond = f"{f}：{SPLIT_LABEL[split]}，間引き{BAL_LABEL[bal]}"
+                tail = f"$L = {L}$，{SIM_LABEL[sim]}"
+                plot_similarity_distribution_ja(st, fig_dir / f"dist_{base}.png", title=f"{cond}，{tail}")
+                plot_author_matrix_ja(st.author_matrix, res.style.authors, fig_dir / f"heatmap_{base}.png", title=f"作家間平均類似度　{cond}\n{tail}")
                 lines += [f"### {f}（{split}，間引き{BAL_LABEL[bal]}）", "", f"![dist](figures/dist_{base}.png)", f"![heatmap](figures/heatmap_{base}.png)", ""]
     return lines
 
 
-CURVE_METRICS = [
-    ("delta_s_macro", "ΔS_macro"),
-    ("map_macro", "MAP (per-author mean)"),
-    ("balanced_accuracy", "Balanced accuracy"),
-    ("macro_f1", "Macro-F1"),
-]
+CURVE_METRICS = [(c, METRIC_LABEL[c]) for c in ("delta_s_macro", "map_macro", "balanced_accuracy", "macro_f1")]
 
 
 def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], fig_dir: Path) -> list[str]:
@@ -517,8 +642,8 @@ def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], f
                     if pts:
                         x, y, e = zip(*pts, strict=True)
                         err = [0.0 if (v is None or math.isnan(v)) else v for v in e]
-                        ax.errorbar(x, y, yerr=err, marker="o", capsize=3, linestyle="-" if bal else "--", label=f"{f} ({BAL_TAG[bal]})")
-            ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel="Chunk length L (chars)", ylabel=mlabel, title=f"{split} / {sim} / {clf}")
+                        ax.errorbar(x, y, yerr=err, marker="o", capsize=3, linestyle="-" if bal else "--", label=f"{f}（間引き{BAL_LABEL[bal]}）")
+            ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel=CHUNK_AXIS_LABEL, ylabel=mlabel, title=f"{SPLIT_LABEL[split]}，{SIM_LABEL[sim]}，{clf_label(clf)}")
             ax.minorticks_off()
             ax.grid(alpha=0.3)
             ax.legend(fontsize=7)
@@ -535,7 +660,7 @@ def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], f
     ]
     cols = ["delta_s_macro", "map_macro", "balanced_accuracy", "macro_f1"]
     write_rows(
-        res.run_dir / "table_chunk_length.csv",
+        res.out_dir / "table_chunk_length.csv",
         ["feature", "split", "balance_train", "chunk_chars", *[x for c in cols for x in (c, f"{c}_std")]],
         [[f, split, bal, L, *[r[x] for c in cols for x in (c, f"{c}_std")]] for f, split, bal, L, r in found],
     )
@@ -592,11 +717,14 @@ def section_best(res: Results, fig_dir: Path) -> list[str]:
     if res.best_key is None:
         return ["## 5. 最良モデル", "", "Inter-work の結果がないため未出力", ""]
     b = res.by_key[res.best_key]
-    plot_confusion_matrix(
+    plot_confusion_ja(
         np.asarray(b["confusion"]),
-        res.authors,
+        res.style.authors,
         fig_dir / "confusion_best.png",
-        title=f"Best (pooled LOWO, {b['n_seeds']} seed(s)): {b['variant']} L={b['chunk_chars']} {BAL_TAG[b['balance_train']]}",
+        title=(
+            f"最良条件（{SPLIT_LABEL[b['split']]}，Pooled，{b['n_seeds']} シード合算）\n"
+            f"{b['variant']}，$L = {b['chunk_chars']}$，間引き{BAL_LABEL[b['balance_train']]}，{clf_label(b['classifier'])}"
+        ),
     )
     per_author = [
         [a, b[f"author_acc_{a}"], p, f1, b[f"author_ap_{a}"]]
@@ -618,7 +746,7 @@ def section_best(res: Results, fig_dir: Path) -> list[str]:
         "",
         *md_table(["作家", "作家別正解率", "適合率", "F 値", "AP の作家別平均"], per_author),
         *source_line("confusion", "balanced_accuracy", "macro_f1", "map"),
-        "誤判別チャンクの抜粋：[misclassified_best.md](misclassified_best.md)",
+        f"誤判別チャンクの抜粋：[misclassified_best.md]({Path(os.path.relpath(res.run_dir / 'misclassified_best.md', res.out_dir)).as_posix()})",
         "",
     ]
 
@@ -677,11 +805,11 @@ def write_rows(path: Path, header: Sequence[str], rows: Sequence[Sequence[Any]])
         writer.writerows(rows)
 
 
-def make_report(run_dir: Path) -> Path:
-    res = Results(run_dir)
+def make_report(run_dir: Path, out_dir: Path, config_path: Path) -> Path:
+    res = Results(run_dir, out_dir, config_path)
     configured = res.cfg["report"]["headline"]
-    fig_dir = run_dir / "figures"
-    fig_dir.mkdir(exist_ok=True)
+    fig_dir = out_dir / "figures"
+    fig_dir.mkdir(parents=True, exist_ok=True)
     features = res.unique("variant", lambda r: r["is_default"])
     # 代表チャンク長が実行範囲に無い場合（例：--chunk-chars 1000 のスモーク）は，最も近い L（同距離なら大きい方）に
     # 置き換え，report.md の冒頭と標準出力に明示する（暗黙の置き換えはしない）
@@ -725,7 +853,7 @@ def make_report(run_dir: Path) -> Path:
         *section_ablation(res, h),
         *section_notes(res),
     ]
-    out = run_dir / "report.md"
+    out = out_dir / "report.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     print(f"[report] {out}（図 {len(list(fig_dir.glob('*.png')))} 枚）")
     return out
@@ -733,11 +861,13 @@ def make_report(run_dir: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("run_dir", type=Path, help="run_experiments.py の出力ディレクトリ")
+    parser.add_argument("run_dir", type=Path, help="run_experiments.py の出力ディレクトリ（読み取り）")
+    parser.add_argument("--out-dir", type=Path, default=None, help="report.md・表 CSV・図の書き出し先（既定：run_dir）")
+    parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "configs" / "default.yaml", help="図のフォント候補・作家の表示名（report セクション）")
     args = parser.parse_args()
     if not (args.run_dir / "results.json").is_file():
         raise FileNotFoundError(f"results.json がない: {args.run_dir}")
-    make_report(args.run_dir)
+    make_report(args.run_dir, args.out_dir or args.run_dir, args.config)
 
 
 if __name__ == "__main__":

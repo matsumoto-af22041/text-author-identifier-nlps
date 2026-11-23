@@ -1,13 +1,13 @@
 """特徴量 D の潜在次元数 K の推移図（Slide 12 のグラフ D）．
 
 使い方：
-    uv run python scripts/plot_d_k_sweep.py --run-dir outputs/D_ablation [--chunk-chars 500] [--classifier centroid]
+    uv run python scripts/plot_d_k_sweep.py --run-dir outputs/D_ablation [--chunk-chars 500] [--classifier centroid] [--out-dir <dir>]
 
 入力：
     <run-dir>/summary.csv  `run_experiments.py --features D --ablation` の出力（K の各値と本採用 K の行を含む）
     data/processed/authors_corpus.json  累積寄与率の算出用（Intra-work の間引きあり Train を再現して fit）
 
-出力（<run-dir>/figures/）：
+出力（--out-dir，既定は <run-dir>/figures/．図の日本語フォントは config の report.font_candidates）：
     d_k_sweep.png  (a) 累積寄与率，(b) 作家別正解率の平均，(c) 作家別 MAP の平均（Intra / Inter，間引きあり）
     d_k_sweep.csv  図の数値（シード平均と標本標準偏差）
 
@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
+from scripts.plot_results import SPLIT_LABEL, clf_label, setup_font
 from scripts.run_experiments import intra_balance_rng
 from src.dataset import balance_train_split, build_chunks, intra_work_split, load_corpus
 from src.features.lsi_embedding import LSIEmbeddingExtractor
@@ -83,8 +84,11 @@ def main() -> None:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--chunk-chars", type=int, default=None, help="既定：config の experiment.ablation_chunk_chars の先頭")
     parser.add_argument("--classifier", default="centroid", help="作家別正解率に用いる推論方式（summary.csv の classifier 列）")
+    parser.add_argument("--out-dir", type=Path, default=None, help="図と CSV の書き出し先（既定：<run-dir>/figures）")
     args = parser.parse_args()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    font = setup_font(cfg["report"]["font_candidates"])
+    print(f"[font] {font}")
     L = args.chunk_chars or cfg["experiment"]["ablation_chunk_chars"][0]
     spec = cfg["features"]["D"]
     default_k = spec["params"]["n_components"]
@@ -103,27 +107,27 @@ def main() -> None:
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.8))
     x = np.arange(len(k_values))
     axes[0].errorbar(x, ratios.mean(axis=0), yerr=ratios.std(axis=0, ddof=1), marker="o", capsize=3, color="tab:gray")
-    axes[0].set_ylabel("Cumulative explained ratio")
-    axes[0].set_title(rf"(a) $\sum_{{j \leq K}} \sigma_j^2 \,/\, \|X\|_F^2$  (intra Train, L={L})")
+    axes[0].set_ylabel("累積寄与率")
+    axes[0].set_title(rf"(a) 累積寄与率 $\sum_{{j \leq K}} \sigma_j^2 \,/\, \|X\|_F^2$（作品内分割の Train，$L = {L}$）", fontsize=9)
 
     panels = [
-        (axes[1], "balanced_accuracy", "Per-author accuracy (mean)", f"(b) accuracy / {args.classifier}"),
-        (axes[2], "map_macro", "Per-author MAP (mean)", "(c) MAP"),
+        (axes[1], "balanced_accuracy", "作家別正解率の平均", f"(b) 作家別正解率の平均（{clf_label(args.classifier)}）"),
+        (axes[2], "map_macro", "作家別 MAP の平均", "(c) 作家別 MAP の平均"),
     ]
     for ax, col, ylabel, title in panels:
         for split, color in zip(SPLITS, ("tab:blue", "tab:orange"), strict=True):
-            ax.errorbar(x, series(split, col), yerr=series(split, f"{col}_std"), marker="o", capsize=3, color=color, label=split)
-            ax.plot(x, series(split, f"{col}_random"), linestyle=":", color=color, label=f"{split} random")
+            ax.errorbar(x, series(split, col), yerr=series(split, f"{col}_std"), marker="o", capsize=3, color=color, label=SPLIT_LABEL[split])
+            ax.plot(x, series(split, f"{col}_random"), linestyle=":", color=color, label=f"基準値（{SPLIT_LABEL[split]}）")
         ax.set_ylabel(ylabel)
-        ax.set_title(title)
+        ax.set_title(title, fontsize=9)
         ax.legend(fontsize=7)
     for ax in axes:
-        ax.set_xticks(x, [f"K={k}" + (" *" if k == default_k else "") for k in k_values])
+        ax.set_xticks(x, [f"$K = {k}$" + (" *" if k == default_k else "") for k in k_values])
         ax.grid(alpha=0.3)
-    fig.suptitle(f"D (LSI): K sweep, L={L}, balanced Train, mean ± std over seeds  (* = default)", fontsize=10)
+    fig.suptitle(f"D（LSI）：潜在次元数 $K$ の比較，$L = {L}$，間引きあり，シード平均 ± 標本標準偏差（* は本採用）", fontsize=10)
     fig.tight_layout()
 
-    fig_dir = args.run_dir / "figures"
+    fig_dir = args.out_dir or args.run_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
     fig.savefig(fig_dir / "d_k_sweep.png", dpi=200)
 

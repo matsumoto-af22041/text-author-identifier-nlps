@@ -146,3 +146,12 @@ report:
         blocks: [words, all, pos_bigram]
     num_misclassified_examples: 20
     excerpt_chars: 120
+    # 図の日本語フォント（plans/031）：matplotlib に登録済みのフォント名を先頭から照合し，最初に見つかったものを使用．
+    #   1 つも見つからない場合は停止（豆腐文字の図を出さない）．macOS・Windows・Linux の班員を想定
+    font_candidates: [Hiragino Sans, Yu Gothic, YuGothic, Meiryo, Noto Sans CJK JP, Noto Sans JP, IPAexGothic]
+    # 図に描く作家名（run_meta.json の author_ids → 表示名）
+    author_labels:
+        soseki: 漱石
+        dazai: 太宰
+        terada: 寺田
+        tayama: 花袋
