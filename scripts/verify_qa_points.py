@@ -1,10 +1,13 @@
 """想定質問（presentation/qa_defense_matrix.md）の根拠となる記述統計の補助検証スクリプト（plans/007）．
 
 使い方：
-    uv run python scripts/verify_qa_points.py [--config configs/default.yaml] [--top-n 20] [--top-words-per-work 12]
+    uv run python scripts/verify_qa_points.py [--config configs/default.yaml] [--baseline-run full_006] [--top-n 20] [--top-words-per-work 12]
 
 出力項目（標準出力のみ．評価パイプラインの結果には影響しない）：
-    Q1      コーパス全 30 作品の作家別作品数と，2 作品以上を持つ作家
+    Q1      コーパス全 30 作品の作家別作品数と，2 作品以上を持つ作家．
+            対象 9 作品の表（文字数・文数・チャンク数・端数として破棄された文字数，L ごと，作家小計・合計，plans/033）．
+            文字数は全 30 作品の値，チャンク数の合計は Q3，作品別のチャンク数は --baseline-run の folds.csv
+            （ Inter-work の各 fold の Test チャンク数）と照合し，不一致なら停止
     Q2      底本の表記揺れ語（副詞「大分 / だいぶ」「矢張り / やはり / やっぱり」）の作品別の表層出現数と，
             UniDic の語彙素（ lemma ）による表記の統一例（副詞と内容語）
     Q3      チャンクの実測文字数（平均・標準偏差・変動係数・最小・最大，L ごと）
@@ -22,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import subprocess
@@ -33,7 +37,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from scripts.run_experiments import intra_balance_rng
+from scripts.run_experiments import corpus_meta, intra_balance_rng
 from src.dataset import Corpus, balance_train_split, build_chunks, chunk_sentences, intra_work_split, load_corpus
 from src.features.lsi_embedding import LSIEmbeddingExtractor
 from src.features.pos_function import CONTENT_POS, FUNCTION_POS, POSFunctionExtractor, top_function_words
@@ -81,6 +85,94 @@ def report_q1(corpus_json: dict[str, Any]) -> None:
     print("\n".join(f"  {a}：{'・'.join(t)}" for a, t in titles.items()))
     print("全作品（index，作家，作品名，文字数）：")
     print("\n".join(f"  {w['index']:>2} {w['author']} 『{w['title']}』 {w['num_chars']}" for w in summary))
+
+
+def load_inter_test_counts(run_dir: Path, corpus_path: Path, corpus: Corpus) -> dict[tuple[int, str], int]:
+    """照合 run の folds.csv から Inter-work の各 fold（Test が 1 作品）の Test チャンク数を読む．
+
+    返り値：{(L, work_id): n_test}．同じ (L, fold) の行（特徴量・推論方式・間引き・シード）の値が 1 通りでなければ停止．
+    """
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"--baseline-run が存在しない: {run_dir}")
+    meta = json.loads((run_dir / "run_meta.json").read_text(encoding="utf-8"))
+    if meta["corpus"]["source_sha256"] != corpus_meta(corpus_path)["source_sha256"]:
+        raise ValueError("コーパスのハッシュが --baseline-run と不一致")
+    if meta.get("cli", {}).get("exclude_works"):
+        raise ValueError(f"--baseline-run は作品除外の run: {meta['cli']['exclude_works']}")
+    titles = {w.work_id: w.title for w in corpus.works}
+    if meta["work_titles"] != titles:
+        raise ValueError(f"作品が --baseline-run と不一致: {meta['work_titles']} vs {titles}")
+    with (run_dir / "folds.csv").open(encoding="utf-8") as f:
+        pairs = {(int(r["chunk_chars"]), r["fold"], int(r["n_test"])) for r in csv.DictReader(f) if r["split"] == "inter"}
+    keys = {(L, fold) for L, fold, _ in pairs}
+    if len(keys) != len(pairs):
+        raise AssertionError(f"同じ fold で Test チャンク数が複数通り: {sorted(pairs)}")
+    prefix = "lowo_"
+    bad = sorted(fold for _, fold in keys if not fold.startswith(prefix))
+    if bad:
+        raise ValueError(f"Inter-work の fold 名が想定外: {bad}")
+    return {(L, fold.removeprefix(prefix)): n for L, fold, n in pairs}
+
+
+def report_q1_works(
+    corpus: Corpus, corpus_json: dict[str, Any], chunk_lengths: Sequence[int], baseline_run: str, inter_counts: dict[tuple[int, str], int]
+) -> None:
+    """対象 9 作品の文字数・文数・チャンク数・端数として破棄された文字数（Slide 2 の表 1）．"""
+    works = corpus.works
+    name_of = dict(zip(corpus.author_ids, corpus.author_names, strict=True))
+    # shape: (num_works,)，単位：文字（Q4 と同じ定義）
+    n_chars = np.array([sum(map(len, w.sentences)) for w in works], dtype=np.int64)
+    # shape: (num_works,)，単位：文（本文 1 行 = 1 文）
+    n_sents = np.array([len(w.sentences) for w in works], dtype=np.int64)
+    chunked = [[chunk_sentences(w.sentences, L) for L in chunk_lengths] for w in works]
+    # shape: (num_works, |L|)
+    n_chunks = np.array([[len(cs) for cs in row] for row in chunked], dtype=np.int64)
+    kept = np.array([[sum(len(s) for ch in cs for s in ch) for cs in row] for row in chunked], dtype=np.int64)
+    dropped = n_chars[:, None] - kept
+    assert np.all(dropped >= 0) and np.all(dropped < n_chars[:, None]) and np.all(n_chunks > 0)
+
+    # 照合 1：文字数を全 30 作品の値（ corpus_summary の num_chars ）と照合
+    summary_chars = [
+        [s["num_chars"] for s in corpus_json["corpus_summary"] if s["author"] == name_of[w.author_id] and s["title"] == w.title]
+        for w in works
+    ]
+    if any(len(c) != 1 for c in summary_chars):
+        raise ValueError(f"全 30 作品の一覧で対象作品が一意に定まらない: {[w.title for w, c in zip(works, summary_chars, strict=True) if len(c) != 1]}")
+    if not np.array_equal(n_chars, np.array([c[0] for c in summary_chars], dtype=np.int64)):
+        raise AssertionError(f"文字数が全 30 作品の値と不一致: {n_chars.tolist()} vs {summary_chars}")
+    # 照合 2：チャンク数の合計を Q3（ build_chunks ）と照合
+    q3_totals = np.array([len(build_chunks(corpus, L)) for L in chunk_lengths], dtype=np.int64)
+    if not np.array_equal(n_chunks.sum(axis=0), q3_totals):
+        raise AssertionError(f"チャンク数の合計が Q3 と不一致: {n_chunks.sum(axis=0).tolist()} vs {q3_totals.tolist()}")
+    # 照合 3：作品別のチャンク数を --baseline-run の Inter-work の Test チャンク数と照合
+    expected_keys = {(L, w.work_id) for L in chunk_lengths for w in works}
+    if set(inter_counts) != expected_keys:
+        raise ValueError(f"--baseline-run の Inter-work の fold が対象と不一致: 過不足 {sorted(set(inter_counts) ^ expected_keys)}")
+    # shape: (num_works, |L|)
+    run_chunks = np.array([[inter_counts[(L, w.work_id)] for L in chunk_lengths] for w in works], dtype=np.int64)
+    if not np.array_equal(n_chunks, run_chunks):
+        raise AssertionError(f"作品別のチャンク数が --baseline-run と不一致: {n_chunks.tolist()} vs {run_chunks.tolist()}")
+
+    # shape: (num_works, 2 + 2 |L|)：文字数，文数，チャンク数（L ごと），破棄された文字数（L ごと）
+    table = np.column_stack([n_chars, n_sents, n_chunks, dropped])
+    author_of = np.array([w.author_id for w in works])
+    subtotals = [(a, table[author_of == a].sum(axis=0)) for a in corpus.author_ids]
+    assert np.array_equal(sum(t for _, t in subtotals), table.sum(axis=0))
+    ls = "/".join(map(str, chunk_lengths))
+
+    def fmt(row: np.ndarray) -> str:
+        k = len(chunk_lengths)
+        return f"{row[0]} {row[1]}  " + " / ".join(map(str, row[2 : 2 + k])) + "  " + " / ".join(map(str, row[2 + k :]))
+
+    print(f"対象 {len(works)} 作品（Slide 2 の表 1．文字数，文数，チャンク数 L = {ls}，端数として破棄された文字数 L = {ls}）：")
+    print("\n".join(f"  {name_of[w.author_id]} 『{w.title}』 {fmt(r)}" for w, r in zip(works, table, strict=True)))
+    print("作家小計：")
+    print("\n".join(f"  {name_of[a]} {fmt(t)}" for a, t in subtotals))
+    print(f"合計：{fmt(table.sum(axis=0))}")
+    print(
+        f"照合：文字数は全 30 作品の値と一致，チャンク数の合計は Q3（{' / '.join(map(str, q3_totals))}）と一致，"
+        f"作品別のチャンク数は {baseline_run} の Inter-work の各 fold の Test チャンク数と一致"
+    )
 
 
 # ---------------------------------------------------------------- Q2
@@ -235,6 +327,9 @@ def report_char_types(corpus: Corpus) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", type=Path, default=PROJECT_ROOT / "configs/default.yaml")
+    parser.add_argument(
+        "--baseline-run", default="full_006", help="Q1 の作品別チャンク数を照合する run 名（experiment.output_dir 配下）"
+    )
     parser.add_argument("--top-n", type=int, default=20, help="Q10 で表示する出現率上位の語数")
     parser.add_argument("--top-words-per-work", type=int, default=12, help="Slide 1a で表示する作品別の付属語の上位語数")
     args = parser.parse_args()
@@ -253,7 +348,11 @@ def main() -> None:
           f"processed sha256 {hashlib.sha256(corpus_path.read_bytes()).hexdigest()[:16]}…）")
     print(f"対象：{len(corpus.author_ids)} 作家・{len(corpus.works)} 作品，L = {chunk_lengths}")
 
+    inter_counts = load_inter_test_counts(PROJECT_ROOT / config["experiment"]["output_dir"] / args.baseline_run, corpus_path, corpus)
+    print(f"照合 run：{args.baseline_run}")
+
     report_q1(corpus_json)
+    report_q1_works(corpus, corpus_json, chunk_lengths, args.baseline_run, inter_counts)
     report_q2(corpus)
     report_q3_q4(corpus, chunk_lengths)
     report_q9(corpus, config)

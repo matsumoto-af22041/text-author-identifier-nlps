@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～032．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～033．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～032．002・0
 | 030 | [function-word-profiles](./030-function-word-profiles.md) | 4 | 007 | Done |
 | 031 | [presentation-figure-labels](./031-presentation-figure-labels.md) | 4 | 007 | Done |
 | 032 | [slide-maker-guide](./032-slide-maker-guide.md) | 4 | 031 | Done |
+| 033 | [slide2-work-table](./033-slide2-work-table.md) | 4 | 007 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes
@@ -194,6 +195,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～032．002・0
   - 解釈上の注意（007 以降の発表で扱う）：偏りの多くは語りの様式（漱石の口語・会話「ちゃ」「てる」，太宰の敬体の語り「ます」「でしょう」，寺田の随筆の論述「べき」，花袋の文語寄りの「ぬ」）で説明できる可能性があり，作家固有の癖と作品の文体・ジャンルを区別できない（仮説）．偏りは作品で大きく異なる（漱石「ちゃ」は『坊っちゃん』16.59 に対し他作品 3.67）．「くらい / ぐらい」「ッて」は底本の表記の違いを含む可能性があり，B も表記の交絡から完全には自由でない．
 - **031（2026-11-23 レビュー済み）**：`plot_results.py` ・ `plot_d_k_sweep.py` の図の文字列を研究の用語（作家別正解率の平均，作品間分割（Inter-work），漱石 等）に変更し，フォント候補（`report.font_candidates` ，見つからなければ停止）を追加．`full_006` から図のみ `outputs/full_006_figs_ja/` に再生成し，`presentation/figures/` の 13 枚を置換．描画データは 36 図すべて旧図と一致，`outputs/full_006/` は無変更．`qa_verification_instructions.md` の冒頭に旧値である旨を 1 行追加．
   - 残課題（任意）：`src/evaluator.py` の英語ラベル付き描画関数 3 つが未使用のまま残り，`plot_results.py` に日本語版が重複．`core_chunk_length.png` の作家別正解率の平均のパネルで凡例が内容語の線に一部重なる．
+- **033（2026-11-24 レビュー済み）**：スライド作成担当の問い合わせ（Slide 2 の表 1 の作品別の値が資料にない）に対応．`verify_qa_points.py` の Q1 に 9 作品の文字数・文数・チャンク数（ $L = 100 / 500 / 1000$ ）・破棄文字数の表を追加し，合計（886709 字，26738 文，7047 / 1679 / 857 チャンク）と `full_006` の Inter-work の fold ごとの Test チャンク数との照合をスクリプト内で実施（不一致で停止することも確認）．既存の出力は不変．storyline の Slide 2 に表 1，qa の Q1 に参照を追加．
+  - 007 の時点で storyline が参照していた Q1 の作品別の値（文数・チャンク数）が実際には出力されていなかった（Orchestrator のレビュー漏れ）．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
