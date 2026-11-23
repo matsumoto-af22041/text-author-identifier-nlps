@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～033．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～035．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -48,6 +48,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～033．002・0
 | 031 | [presentation-figure-labels](./031-presentation-figure-labels.md) | 4 | 007 | Done |
 | 032 | [slide-maker-guide](./032-slide-maker-guide.md) | 4 | 031 | Done |
 | 033 | [slide2-work-table](./033-slide2-work-table.md) | 4 | 007 | Done |
+| 034 | [presentation-results-audit](./034-presentation-results-audit.md) | 4 | 033 | Done |
+| 035 | [presentation-audit-fixes](./035-presentation-audit-fixes.md) | 4 | 034 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes
@@ -197,6 +199,12 @@ Orchestrator の委譲対象：000・001・004・006～010・012～033．002・0
   - 残課題（任意）：`src/evaluator.py` の英語ラベル付き描画関数 3 つが未使用のまま残り，`plot_results.py` に日本語版が重複．`core_chunk_length.png` の作家別正解率の平均のパネルで凡例が内容語の線に一部重なる．
 - **033（2026-11-24 レビュー済み）**：スライド作成担当の問い合わせ（Slide 2 の表 1 の作品別の値が資料にない）に対応．`verify_qa_points.py` の Q1 に 9 作品の文字数・文数・チャンク数（ $L = 100 / 500 / 1000$ ）・破棄文字数の表を追加し，合計（886709 字，26738 文，7047 / 1679 / 857 チャンク）と `full_006` の Inter-work の fold ごとの Test チャンク数との照合をスクリプト内で実施（不一致で停止することも確認）．既存の出力は不変．storyline の Slide 2 に表 1，qa の Q1 に参照を追加．
   - 007 の時点で storyline が参照していた Q1 の作品別の値（文数・チャンク数）が実際には出力されていなかった（Orchestrator のレビュー漏れ）．
+- **034（2026-11-24 レビュー済み）**：`presentation/` の 4 資料（storyline，qa，slides_d，README）の結果の存在確認．判定表 88 行（OK 75，値なし 4，不一致 9（問題としては 6 件），出典なし 0，再現不可 0），スクリプトによる個別照合 808 件．照合の詳細は `outputs/audit_034/checks.csv` ・ `checks_text.csv` （`report.md` はハーネスの制限で未作成，内容は本メモと後続の修正チケットに記録）．
+  - 不一致：「全条件で同点 0 件」（本採用は 0 だがアブレーションの $k$-NN で 0.2～4.0 件），A の symbol の低下 −0.008 → −0.007，D の割り増し係数の比 0.93 → 0.92，slides_d の図のバイト一致の記述が 031 以前のまま，Q10 の出現率 0.999 → 0.998，字種構成比 2 値（二重丸め）．
+  - 値なし：Slide 1 の班員一覧・概念図，Slide 2 の全 30 作品の作家別作品数，Slide 3 の図 1．グラフ A・C・F は値はあるが図ファイルなし．
+  - 懸念：講義 p.14 の「再現」は上位語の顔ぶれの一致のみ（順位は一致しない），idf = 0 の語数は間引きなしの Train で数えた値，`chunk_length_curves.png` に間引きの有無で異なる基準値の線がない，Q2 の件数の数え方が 2 通り．
+- **035（2026-11-24 レビュー済み）**：034 の不一致 6 件・値なし 1 件（30 作品の作家別作品数）・表現 4 件を修正．値なしの残り（Slide 1 の班員一覧・概念図，Slide 3 の図 1，グラフ A・C・F の作図）は storyline に「スライド作成時に作成」と明記．`chunk_length_curves.png` に基準値の線（間引きあり・なし）を追加し，2 図の凡例を図の下に移動（他の描画データは 35 図で差分 0，基準値の線は `map_macro_random` と誤差 0）．034 の監査スクリプトの再実行で 667 / 667，148 / 148 が OK．
+  - 監査で見落としていた字種構成比の 3 値目（『柿の種』のひらがな 0.614 → 0.613）も修正．監査スクリプト自体が二重丸めしていた．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

@@ -6,7 +6,7 @@
   - `full_006`：006 の Full Experiment（コミット `9668297` ， `dirty: false` ）．D の本採用（ $K = 32$ ， `projection=u` ）とアブレーション（ $L = 500$ ， $K \in \{8, 16, 64\}$ と `projection=us` ），C を含む．以下の表の値はすべて `full_006` の `report.md` ・ `summary.csv` と一致（007 で照合）
   - 累積寄与率：`uv run python scripts/verify_qa_points.py` の Q9（ `scripts/plot_d_k_sweep.py` と同じ Train で fit）
 - 特記なき数値は **間引きあり・5 シード平均（± 標本標準偏差）・重心法・ $L = 500$**．
-- 図のコピー： `presentation/figures/d_k_sweep.png` （ `full_006` の `summary.csv` から `scripts/plot_d_k_sweep.py` で再生成した図とバイト一致）， `presentation/figures/d_heatmap_L500_inter_bal.png` （ `full_006` の `heatmap_D_L500_inter_bal_cosine.png` とバイト一致）
+- 図のコピー： `presentation/figures/d_k_sweep.png` （ `full_006` の `summary.csv` から `scripts/plot_d_k_sweep.py` で再生成した図とバイト一致）， `presentation/figures/d_heatmap_L500_inter_bal.png` （ `full_006` の出力から 031 で日本語表記に再生成した `outputs/full_006_figs_ja/figures/heatmap_D_L500_inter_bal_cosine.png` とバイト一致）
 - 指標の方針： $K$ の比較には作家別正解率の平均と作家別 MAP の平均のみを用い， $\Delta S$ は使わない（ $K$ を変えるとベクトルの次元数が変わり，コサイン類似度の値の分布そのものが変わるため．`research-context.md` の $\Delta S$ の使用範囲）．
 
 ---

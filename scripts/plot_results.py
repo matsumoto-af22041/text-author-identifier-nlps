@@ -429,8 +429,10 @@ def core_chunk_length(res: Results, cs: CoreSpec, h: dict[str, Any], Ls: list[in
             ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel=CHUNK_AXIS_LABEL, ylabel=METRIC_LABEL[col], title=f"{SPLIT_LABEL[split]}，間引き{BAL_LABEL[bal]}，{clf_label(clf)}")
             ax.minorticks_off()
             ax.grid(alpha=0.3)
-            ax.legend(fontsize=7)
-    fig.tight_layout()
+    # 凡例は線と重ならないよう図の下に 1 つだけ置く（基準値の線を含む作家別正解率の平均のパネルから採る）
+    handles, labels = axes[CORE_COLS.index("balanced_accuracy")][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=len(labels), fontsize=8, frameon=False)
+    fig.tight_layout(rect=(0, 0.035, 1, 1))
     fig.savefig(fig_dir / "core_chunk_length.png", dpi=200)
     plt.close(fig)
     return [
@@ -629,6 +631,14 @@ def section_distributions(res: Results, h: dict[str, Any], features: list[str], 
 CURVE_METRICS = [(c, METRIC_LABEL[c]) for c in ("delta_s_macro", "map_macro", "balanced_accuracy", "macro_f1")]
 
 
+def chance_map(res: Results, features: list[str], L: int, split: str, bal: bool, sim: str, clf: str) -> float:
+    """作家別 MAP の平均のランダム基準（summary の map_macro_random）．Train の構成のみで決まり特徴量に依らないことを確認して返す．"""
+    vals = [float(r["map_macro_random"]) for f in features if (r := res.get(f, L, split, bal, sim, clf)) is not None]
+    assert vals, f"map_macro_random がない: L={L}, {split}, bal={bal}"
+    assert np.allclose(vals, vals[0], rtol=0, atol=1e-12), f"map_macro_random が特徴量で異なる: L={L}, {split}, bal={bal}, {vals}"
+    return vals[0]
+
+
 def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], fig_dir: Path) -> list[str]:
     sim, clf = h["similarity"], h["classifier"]
     Ls = sorted(res.unique("chunk_chars"))
@@ -643,11 +653,17 @@ def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], f
                         x, y, e = zip(*pts, strict=True)
                         err = [0.0 if (v is None or math.isnan(v)) else v for v in e]
                         ax.errorbar(x, y, yerr=err, marker="o", capsize=3, linestyle="-" if bal else "--", label=f"{f}（間引き{BAL_LABEL[bal]}）")
+            if mkey == "map_macro":
+                for bal in res.balances:
+                    x, y = map(list, zip(*[(L, chance_map(res, features, L, split, bal, sim, clf)) for L in Ls], strict=True))
+                    ax.plot(x, y, color="black", linewidth=0.9, linestyle="-" if bal else "--", label=f"基準値（間引き{BAL_LABEL[bal]}）")
             ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel=CHUNK_AXIS_LABEL, ylabel=mlabel, title=f"{SPLIT_LABEL[split]}，{SIM_LABEL[sim]}，{clf_label(clf)}")
             ax.minorticks_off()
             ax.grid(alpha=0.3)
-            ax.legend(fontsize=7)
-    fig.tight_layout()
+    # 凡例は線と重ならないよう図の下に 1 つだけ置く（基準値の線を含む作家別 MAP の平均のパネルから採る）
+    handles, labels = axes[[k for k, _ in CURVE_METRICS].index("map_macro")][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=5, fontsize=8, frameon=False)
+    fig.tight_layout(rect=(0, 0.045, 1, 1))
     fig.savefig(fig_dir / "chunk_length_curves.png", dpi=200)
     plt.close(fig)
     found = [
@@ -667,7 +683,7 @@ def section_chunk_length(res: Results, h: dict[str, Any], features: list[str], f
     return [
         "## 3. チャンク長 L による類似度ギャップと判別精度の推移（特徴量内の比較）",
         "",
-        f"条件：`{sim}`，`{clf}`．実線は間引きあり，破線は間引きなし，誤差棒は標本標準偏差．$\\Delta S_{{\\text{{macro}}}}$ は同じ特徴量のチャンク長別の比較に用いる",
+        f"条件：`{sim}`，`{clf}`．実線は間引きあり，破線は間引きなし，誤差棒は標本標準偏差．作家別 MAP の平均のパネルの黒の細線（印なし）は基準値（`map_macro_random`，間引きの有無で異なる）．$\\Delta S_{{\\text{{macro}}}}$ は同じ特徴量のチャンク長別の比較に用いる",
         "",
         "![chunk length](figures/chunk_length_curves.png)",
         "",
