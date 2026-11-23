@@ -72,6 +72,8 @@ class FeatureVariant:
     cls: type[BaseFeatureExtractor]
     params: dict[str, Any]
     is_default: bool
+    # True のとき --ablation の有無によらず全チャンク長で実行（features.<key>.all_chunk_chars，plans/006）
+    all_chunk_chars: bool = False
 
     def make(self) -> BaseFeatureExtractor:
         return self.cls(**self.params)
@@ -95,7 +97,18 @@ def load_feature_class(key: str, spec: dict[str, Any]) -> type[BaseFeatureExtrac
     return cls
 
 
-def build_variants(cfg: dict[str, Any], keys: Sequence[str], with_ablation: bool) -> list[FeatureVariant]:
+def override_name(key: str, override: dict[str, Any]) -> str:
+    """差し替え条件の設定名：key[p1=v1,p2=v2]（引数名の昇順．1 引数のアブレーションも同じ形式）．"""
+    return f"{key}[{','.join(f'{p}={override[p]}' for p in sorted(override))}]"
+
+
+def build_variants(cfg: dict[str, Any], keys: Sequence[str], with_ablation: bool, with_all_chunk_chars: bool = False) -> list[FeatureVariant]:
+    """本採用・アブレーション・combinations・全チャンク長で常時実行する条件（all_chunk_chars）の設定一覧．
+
+    with_all_chunk_chars が true のとき all_chunk_chars の条件を with_ablation によらず含め，ablations / combinations と
+    同じ差し替えなら同じ設定名の 1 条件にまとめる（全チャンク長で実行）．false（既定）は従来どおり本採用
+    （と with_ablation 時のアブレーション）のみで，本採用のみを使う補助スクリプト（measure_centroid_norm.py）向け．
+    """
     unknown = set(keys) - set(cfg["features"])
     if unknown:
         raise KeyError(f"features に未登録の特徴量: {sorted(unknown)}（登録済み: {sorted(cfg['features'])}）")
@@ -105,26 +118,37 @@ def build_variants(cfg: dict[str, Any], keys: Sequence[str], with_ablation: bool
         cls = load_feature_class(key, spec)
         params = dict(spec["params"])
         default = FeatureVariant(key, key, cls, params, True)
-        ablations = [
-            FeatureVariant(key, f"{key}[{p}={v}]", cls, params | {p: v}, False)
-            for p, values in (spec.get("ablations") or {}).items()
-            for v in values
-        ]
+
+        def check_overrides(field: str, overrides: list[dict[str, Any]], min_params: int) -> None:
+            unknown_params = sorted({p for c in overrides for p in c} - set(params))
+            if unknown_params:
+                raise KeyError(f"features.{key}.{field} に params に無い引数: {unknown_params}")
+            if any(len(c) < min_params for c in overrides):
+                raise ValueError(f"features.{key}.{field} の各要素は {min_params} 引数以上: {overrides}")
+            if any(params | c == params for c in overrides):
+                raise ValueError(f"features.{key}.{field} に本採用と同一の条件: {overrides}")
+
+        # 1 引数のアブレーション
+        single = [{p: v} for p, values in (spec.get("ablations") or {}).items() for v in values]
         # 複数引数の同時差し替え（例：B の内容語対照 × 語ブロックのみ，plans/025）
-        combos = spec.get("combinations") or []
-        unknown_params = sorted({p for c in combos for p in c} - set(params))
-        if unknown_params:
-            raise KeyError(f"features.{key}.combinations に params に無い引数: {unknown_params}")
-        if any(len(c) < 2 for c in combos):
-            raise ValueError(f"features.{key}.combinations の各要素は 2 引数以上（1 引数は ablations に記載）: {combos}")
-        combinations = [
-            FeatureVariant(key, f"{key}[{','.join(f'{p}={c[p]}' for p in sorted(c))}]", cls, params | c, False)
-            for c in combos
-        ]
-        names = [v.name for v in (default, *ablations, *combinations)]
-        if len(names) != len(set(names)):
+        combos = list(spec.get("combinations") or [])
+        check_overrides("combinations", combos, 2)
+        # --ablation なしでも全チャンク長で実行する条件（例：B の主結果の対照条件，plans/006）
+        always = list(spec.get("all_chunk_chars") or [])
+        check_overrides("all_chunk_chars", always, 1)
+        names = [override_name(key, c) for c in (*single, *combos)]
+        if len(names) != len(set(names)) or key in names:
             raise ValueError(f"特徴量 {key} の条件名が重複: {names}")
-        return [default, *((ablations + combinations) if with_ablation else [])]
+        always_names = {override_name(key, c) for c in always}
+        if len(always_names) != len(always):
+            raise ValueError(f"features.{key}.all_chunk_chars に重複: {always}")
+        always = always if with_all_chunk_chars else []
+        always_names = always_names if with_all_chunk_chars else set()
+        # 設定名 → 差し替え（アブレーション・combinations の順，all_chunk_chars のみの条件は末尾）
+        overrides = dict(zip(names, (*single, *combos), strict=True)) if with_ablation else {}
+        overrides |= {override_name(key, c): c for c in always if override_name(key, c) not in overrides}
+        extra = [FeatureVariant(key, n, cls, params | c, False, n in always_names) for n, c in overrides.items()]
+        return [default, *extra]
 
     return [v for key in keys for v in variants_of(key)]
 
@@ -534,7 +558,7 @@ def main() -> None:
     if args.ablation and not set(chunk_chars) & set(ablation_L):
         raise ValueError(f"--ablation 指定時は --chunk-chars に experiment.ablation_chunk_chars {ablation_L} のいずれかを含めること")
     # 長時間の実行前に全特徴量クラスの読み込みを検証（Fail-Fast）
-    variants = build_variants(cfg, feature_keys, args.ablation)
+    variants = build_variants(cfg, feature_keys, args.ablation, with_all_chunk_chars=True)
     specs = classifier_specs(cfg)
     sims = list(cfg["similarity"]["names"])
     sim_kwargs = {"eps": cfg["similarity"]["eps"]}
@@ -562,13 +586,18 @@ def main() -> None:
             "ablation": args.ablation,
             **({"exclude_works": list(args.exclude_works)} if args.exclude_works else {}),
         },
-        "variants": [{"name": v.name, "class": f"{v.cls.__module__}.{v.cls.__name__}", "params": v.params} for v in variants],
+        "variants": [
+            {"name": v.name, "class": f"{v.cls.__module__}.{v.cls.__name__}", "params": v.params, "all_chunk_chars": v.is_default or v.all_chunk_chars}
+            for v in variants
+        ],
         "classifiers": [s.name for s in specs],
         "similarities": sims,
         "git": git_state(),
         "corpus": corpus_meta(corpus_path),
         "author_ids": list(corpus.author_ids),
         "author_names": list(corpus.author_names),
+        # 作品 ID → 作品名（report.md の作品ごとの表で使用）
+        "work_titles": {w.work_id: w.title for w in corpus.works},
         "python": platform.python_version(),
         "numpy": np.__version__,
     }
@@ -606,7 +635,8 @@ def main() -> None:
                 meta["balance_train"][split_type]["folds"][str(L)] = records
                 n_min = sorted({(r["fold"], r["n_min"]) for recs in records.values() for r in recs}, key=lambda x: x[1])
                 print(f"[info] L={L} {split_type} n_min（最小 3 件）: {n_min[:3]}")
-        active = [v for v in variants if v.is_default or L in cfg["experiment"]["ablation_chunk_chars"]]
+        # 本採用と all_chunk_chars の条件は全チャンク長，それ以外のアブレーションは experiment.ablation_chunk_chars のみ
+        active = [v for v in variants if v.is_default or v.all_chunk_chars or L in ablation_L]
         for v in active:
             for split_type in split_types:
                 t0 = time.perf_counter()

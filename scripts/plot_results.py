@@ -154,90 +154,240 @@ def section_variants(res: Results) -> list[str]:
     ]
 
 
-def find_variant_row(res: Results, feature: str, params: dict[str, Any], L: int, split: str, bal: bool, sim: str, clf: str) -> Row | None:
-    """特徴量 feature のうち params が完全一致する設定のシード平均行（設定名ではなく params で照合）．"""
+def variant_name(res: Results, feature: str, params: dict[str, Any]) -> str | None:
+    """特徴量 feature のうち params が完全一致する設定名（設定名ではなく params で照合）．"""
     names = [v["name"] for v in res.meta["variants"] if v["name"].split("[", 1)[0] == feature and v["params"] == params]
     if len(names) > 1:
         raise ValueError(f"params が同一の設定が複数: {names}")
-    return res.get(names[0], L, split, bal, sim, clf) if names else None
+    return names[0] if names else None
 
 
-def section_core(res: Results, h: dict[str, Any]) -> list[str]:
-    """冒頭の主結果表：B の付属語（既定）vs 内容語対照を同一の表現（相対頻度・表層形・同一の品詞 2-gram ブロック）で比較．"""
-    cc = res.cfg["report"].get("core_comparison")
-    if cc is None:
+def find_variant_row(res: Results, feature: str, params: dict[str, Any], L: int, split: str, bal: bool, sim: str, clf: str) -> Row | None:
+    """特徴量 feature のうち params が完全一致する設定のシード平均行．"""
+    name = variant_name(res, feature, params)
+    return res.get(name, L, split, bal, sim, clf) if name else None
+
+
+class CoreSpec:
+    """report.core_comparison の解釈：付属語（func）・内容語対照（cont）× blocks の条件の params と設定名．"""
+
+    def __init__(self, res: Results) -> None:
+        cc = res.cfg["report"]["core_comparison"]
+        self.feature, self.param, self.blocks = cc["feature"], cc["param"], list(cc["blocks"])
+        self.kinds = {"func": cc["function_words"], "cont": cc["content_words"]}
+        self.default = next((v["params"] for v in res.meta["variants"] if v["name"] == self.feature), None)
+        self.res = res
+
+    def params(self, kind: str, blocks: str) -> dict[str, Any]:
+        assert self.default is not None
+        return self.default | {self.param: self.kinds[kind], "blocks": blocks}
+
+    def name(self, kind: str, blocks: str) -> str | None:
+        return variant_name(self.res, self.feature, self.params(kind, blocks))
+
+    def row(self, kind: str, blocks: str, L: int, split: str, bal: bool, sim: str, clf: str) -> Row | None:
+        n = self.name(kind, blocks)
+        return self.res.get(n, L, split, bal, sim, clf) if n else None
+
+
+CORE_COLS = ("map_macro", "balanced_accuracy", "macro_f1")
+CORE_LABEL = {"func": "付属語", "cont": "内容語"}
+
+
+def section_core(res: Results, h: dict[str, Any], fig_dir: Path) -> list[str]:
+    """冒頭の主結果表：B の付属語（既定）vs 内容語対照を同一の表現（相対頻度・表層形・同一の品詞 2-gram ブロック）で比較．
+
+    全チャンク長の表・チャンク長別推移の図と，Inter-work の作品ごとの一貫性の表を含む．
+    """
+    if res.cfg["report"].get("core_comparison") is None:
         return []
-    feature, param = cc["feature"], cc["param"]
-    title = f"## 主結果：{feature} の付属語 vs 内容語対照（Core Message の検証）"
-    default = next((v["params"] for v in res.meta["variants"] if v["name"] == feature), None)
-    if default is None:
-        return [title, "", f"今回の実行に特徴量 {feature} が含まれないため未出力", ""]
-    L, sim, clf = h["chunk_chars"], h["similarity"], h["classifier"]
-    kinds = {"func": cc["function_words"], "cont": cc["content_words"]}
-
-    def row_of(kind: str, blocks: str, split: str, bal: bool) -> Row | None:
-        return find_variant_row(res, feature, default | {param: kinds[kind], "blocks": blocks}, L, split, bal, sim, clf)
-
+    cs = CoreSpec(res)
+    title = f"## 主結果：{cs.feature} の付属語 vs 内容語対照（Core Message の検証）"
+    if cs.default is None:
+        return [title, "", f"今回の実行に特徴量 {cs.feature} が含まれないため未出力", ""]
+    sim, clf = h["similarity"], h["classifier"]
+    Ls = sorted(res.unique("chunk_chars"))
     found = [
-        (blocks, split, bal, f, c)
-        for blocks in cc["blocks"]
+        (blocks, L, split, bal, f, c)
+        for blocks in cs.blocks
+        for L in Ls
         for split in ("intra", "inter")
         for bal in res.balances
-        if (f := row_of("func", blocks, split, bal)) is not None
+        if (f := cs.row("func", blocks, L, split, bal, sim, clf)) is not None
         # pos_bigram は target_pos が出力に影響しないため内容語対照の行は作らない
-        for c in [None if blocks == "pos_bigram" else row_of("cont", blocks, split, bal)]
+        for c in [None if blocks == "pos_bigram" else cs.row("cont", blocks, L, split, bal, sim, clf)]
     ]
-    # 内容語対照の行が 1 つも無い（--ablation なし等）場合は比較にならないため表を出さない
+    # 内容語対照の行が 1 つも無い場合は比較にならないため表を出さない
     if not any(c is not None for *_, c in found):
         return [
             title,
             "",
-            f"今回の実行に比較条件（`{param}` × `blocks` の差し替え）が含まれないため未出力．"
-            f"`--ablation` を付け，`--chunk-chars` に `experiment.ablation_chunk_chars` {res.cfg['experiment']['ablation_chunk_chars']} "
-            f"と代表チャンク長 $L = {L}$ が一致する条件で実行すること",
+            f"今回の実行に比較条件（`{cs.param}` × `blocks` の差し替え）が含まれないため未出力．"
+            f"`features.{cs.feature}.all_chunk_chars` に対照条件が設定されていることを確認すること",
             "",
         ]
-    cols = ("map_macro", "balanced_accuracy", "macro_f1")
     rows = [
         [
             f"`{blocks}`",
+            L,
             split,
             BAL_LABEL[bal],
-            *[x for col in cols for x in (pm(f, col), pm(c, col) if c else "—", fmt(f[col] - c[col]) if c else "—")],
+            *[x for col in CORE_COLS for x in (pm(f, col), pm(c, col) if c else "—", fmt(f[col] - c[col]) if c else "—")],
             fmt(f["map_macro_random"]),
         ]
-        for blocks, split, bal, f, c in found
+        for blocks, L, split, bal, f, c in found
     ]
     write_rows(
         res.run_dir / "table_core_comparison.csv",
-        ["blocks", "split", "balance_train", "word_type", "variant", "n_seeds", *[x for col in (*cols, "map_macro_random") for x in (col, f"{col}_std")]],
+        ["blocks", "chunk_chars", "split", "balance_train", "word_type", "variant", "n_seeds", *[x for col in (*CORE_COLS, "map_macro_random") for x in (col, f"{col}_std")]],
         [
-            [blocks, split, bal, kind, r["variant"], r["n_seeds"], *[r[x] for col in (*cols, "map_macro_random") for x in (col, f"{col}_std")]]
-            for blocks, split, bal, f, c in found
+            [blocks, L, split, bal, kind, r["variant"], r["n_seeds"], *[r[x] for col in (*CORE_COLS, "map_macro_random") for x in (col, f"{col}_std")]]
+            for blocks, L, split, bal, f, c in found
             for kind, r in (("function", f), ("content", c))
             if r is not None
         ],
     )
     header = [
         "blocks",
+        "L",
         "分割",
         "間引き",
         *[x for name in ("作家別 MAP の平均", "作家別正解率の平均", "作家別 F 値の平均") for x in (f"{name}（付属語）", f"{name}（内容語）", "差（付属語 − 内容語）")],
         "作家別 MAP の平均の基準値",
     ]
+    missing_L = sorted(set(Ls) - {L for b, L, *_, c in found if b == cs.blocks[0] and c is not None})
     return [
         title,
         "",
-        f"条件：`{feature}`，$L = {L}$，`{sim}`，`{clf}`（作家別 MAP の平均は推論方式に依存しない）．"
-        f"付属語 `{param}={kinds['func']}`（本採用），内容語対照 `{param}={kinds['cont']}`．それ以外の引数（相対頻度・表層形・品詞 2-gram ブロック）は共通",
+        f"条件：`{cs.feature}`，`{sim}`，`{clf}`（作家別 MAP の平均は推論方式に依存しない）．"
+        f"付属語 `{cs.param}={cs.kinds['func']}`（本採用），内容語対照 `{cs.param}={cs.kinds['cont']}`．それ以外の引数（相対頻度・表層形・品詞 2-gram ブロック）は共通",
         "",
-        f"- 主は `blocks={cc['blocks'][0]}`（語ブロック単独）．"
-        + "，".join(f"`blocks={b}`" for b in cc["blocks"][1:])
+        f"- 主は `blocks={cs.blocks[0]}`（語ブロック単独）．"
+        + "，".join(f"`blocks={b}`" for b in cs.blocks[1:])
         + " は併記（`all` は品詞 2-gram との結合版，`pos_bigram` は品詞 2-gram 単独で付属語・内容語の区別なし）",
+        f"- `words` ・ `all` の対照条件は全チャンク長（`features.{cs.feature}.all_chunk_chars`），`pos_bigram` は `--ablation` 指定時の "
+        f"`experiment.ablation_chunk_chars` {res.cfg['experiment']['ablation_chunk_chars']} のみ",
         "- 作家別正解率の平均の基準値は 0.25，作家別 F 値の平均の基準値は第 1 節の表を参照",
+        *([f"- **注意**：`blocks={cs.blocks[0]}` の対照条件が無いチャンク長：{missing_L}"] if missing_L else []),
         "",
-        *md_table(header, rows, "lll" + "r" * (len(header) - 3)),
+        *md_table(header, rows, "lrll" + "r" * (len(header) - 4)),
         *source_line("cosine", "map", "balanced_accuracy", "macro_f1", "random"),
+        *core_chunk_length(res, cs, h, Ls, fig_dir),
+        *core_per_work(res, cs, h),
+    ]
+
+
+def core_chunk_length(res: Results, cs: CoreSpec, h: dict[str, Any], Ls: list[int], fig_dir: Path) -> list[str]:
+    """主結果のチャンク長別推移（間引きあり，words・all の付属語 vs 内容語）．"""
+    sim, clf = h["similarity"], h["classifier"]
+    splits = [s for s in ("intra", "inter") if s in res.unique("split")]
+    blocks = [b for b in cs.blocks if b != "pos_bigram"]
+    bal = res.balances[0]
+    fig, axes = plt.subplots(len(CORE_COLS), len(splits), figsize=(4.6 * len(splits), 3.0 * len(CORE_COLS)), squeeze=False)
+    labels = {"map_macro": "MAP (per-author mean)", "balanced_accuracy": "Balanced accuracy", "macro_f1": "Macro-F1"}
+    for col, ax_row in zip(CORE_COLS, axes, strict=True):
+        for split, ax in zip(splits, ax_row, strict=True):
+            for b in blocks:
+                for kind, color in (("func", "C0"), ("cont", "C3")):
+                    pts = [(L, r[col], r[f"{col}_std"]) for L in Ls if (r := cs.row(kind, b, L, split, bal, sim, clf)) is not None]
+                    if pts:
+                        x, y, e = zip(*pts, strict=True)
+                        err = [0.0 if (v is None or math.isnan(v)) else v for v in e]
+                        main = b == blocks[0]
+                        ax.errorbar(x, y, yerr=err, marker="o" if main else "s", linestyle="-" if main else ":", capsize=3, color=color, label=f"{'function' if kind == 'func' else 'content'} / {b}")
+            if col == "balanced_accuracy":
+                ax.axhline(0.25, color="gray", linewidth=0.8)
+            ax.set(xscale="log", xticks=Ls, xticklabels=[str(L) for L in Ls], xlabel="Chunk length L (chars)", ylabel=labels[col], title=f"{split} / {BAL_TAG[bal]} / {clf}")
+            ax.minorticks_off()
+            ax.grid(alpha=0.3)
+            ax.legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "core_chunk_length.png", dpi=200)
+    plt.close(fig)
+    return [
+        f"### 主結果のチャンク長別推移（間引き{BAL_LABEL[bal]}）",
+        "",
+        f"青：付属語，赤：内容語対照．実線は `blocks={blocks[0]}`（主），点線・四角印は "
+        + "，".join(f"`blocks={b}`" for b in blocks[1:])
+        + "．誤差棒は標本標準偏差，灰色の横線は作家別正解率の平均の基準値 0.25．数値は上の表を参照",
+        "",
+        "![core chunk length](figures/core_chunk_length.png)",
+        "",
+        *source_line("map", "balanced_accuracy", "macro_f1"),
+    ]
+
+
+def read_folds(run_dir: Path) -> list[Row]:
+    with (run_dir / "folds.csv").open(encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def core_per_work(res: Results, cs: CoreSpec, h: dict[str, Any]) -> list[str]:
+    """Inter-work（間引きあり）の作品ごとの一貫性：Test 作品（fold）ごとの付属語 vs 内容語（blocks の主）．
+
+    作品ごとの作家別 MAP の平均に相当する値は，その fold の Test チャンクの AP の平均（fold の map_micro．
+    Test は 1 作家のみのため作家別平均と一致）．作家別正解率はその fold の正解率（fold の accuracy）．
+    """
+    clf, b0 = h["classifier"], cs.blocks[0]
+    title = f"### 作品ごとの一貫性（Inter-work，間引きあり，`blocks={b0}`）"
+    names = {k: cs.name(k, b0) for k in ("func", "cont")}
+    if True not in res.balances or "inter" not in res.unique("split") or None in names.values():
+        return [title, "", "今回の実行に Inter-work の間引きありの対照条件が含まれないため未出力", ""]
+    folds = [
+        r for r in read_folds(res.run_dir)
+        if r["split"] == "inter" and r["balance_train"] == "True" and r["classifier"] == clf and r["similarity"] == h["similarity"]
+    ]
+    titles = res.meta.get("work_titles", {})
+    Ls = sorted({int(r["chunk_chars"]) for r in folds})
+    metrics = (("map_micro", "作家別 MAP の平均（Test チャンクの AP の平均）"), ("accuracy", "作家別正解率"))
+
+    def values(kind: str, L: int, fold: str, col: str) -> np.ndarray:
+        # shape: (n_seeds,)，シード昇順
+        rows = sorted((r for r in folds if r["variant"] == names[kind] and int(r["chunk_chars"]) == L and r["fold"] == fold), key=lambda r: int(r["seed"]))
+        return np.array([float(r[col]) for r in rows], dtype=np.float64)
+
+    def ms(v: np.ndarray) -> str:
+        return f"{v.mean():.3f} ± {v.std(ddof=1):.3f}" if v.size > 1 else f"{v.mean():.3f}"
+
+    table: list[list[Any]] = []
+    csv_rows: list[list[Any]] = []
+    wins: list[list[Any]] = []
+    for L in Ls:
+        fold_names = list(dict.fromkeys(r["fold"] for r in folds if int(r["chunk_chars"]) == L and r["variant"] == names["func"]))
+        diffs: dict[str, list[float]] = {col: [] for col, _ in metrics}
+        for fold in fold_names:
+            work = fold.removeprefix("lowo_")
+            vals = {(k, col): values(k, L, fold, col) for k in ("func", "cont") for col, _ in metrics}
+            n = {v.size for v in vals.values()}
+            if len(n) != 1 or 0 in n:
+                raise ValueError(f"fold {fold}（L={L}）のシード数が条件間で不一致: {sorted(n)}")
+            for col, _ in metrics:
+                diffs[col].append(float(vals[("func", col)].mean() - vals[("cont", col)].mean()))
+            table.append([
+                L,
+                titles.get(work, work),
+                *[x for col, _ in metrics for x in (ms(vals[("func", col)]), ms(vals[("cont", col)]), fmt(diffs[col][-1]))],
+            ])
+            csv_rows.append([L, work, titles.get(work, work), n.pop(), *[vals[(k, col)].mean() for col, _ in metrics for k in ("func", "cont")], *[vals[(k, col)].std(ddof=1) for col, _ in metrics for k in ("func", "cont")]])
+        wins.append([L, len(fold_names), *[f"{sum(d > 0 for d in diffs[col])} / {len(fold_names)}" for col, _ in metrics], *[f"{sum(d == 0 for d in diffs[col])}" for col, _ in metrics]])
+    write_rows(
+        res.run_dir / "table_core_per_work.csv",
+        ["chunk_chars", "work_id", "title", "n_seeds", *[f"{col}_{k}" for col, _ in metrics for k in ("function", "content")], *[f"{col}_{k}_std" for col, _ in metrics for k in ("function", "content")]],
+        csv_rows,
+    )
+    head = [x for _, name in metrics for x in (f"{name}（付属語）", f"{name}（内容語）", "差")]
+    return [
+        title,
+        "",
+        f"条件：`{cs.feature}`，`{h['similarity']}`，`{clf}`（作家別 MAP の平均に相当する値は推論方式に依存しない）．"
+        "各 Test 作品（fold）の Test チャンクは 1 作家のみのため，その作品の作家別 MAP の平均は Test チャンクの AP の平均，作家別正解率はその作品の Test チャンクの正解率",
+        "",
+        "- ± は間引きの乱数（シード）によるばらつきのみで，作品の違いによるばらつきを含まない（作品間のばらつきは下の作品ごとの差の分布で見る）",
+        "- 付属語が上回る作品数はシード平均の差（付属語 − 内容語）が正の作品数",
+        "",
+        *md_table(["L", "作品数", "付属語が上回る作品数（MAP）", "付属語が上回る作品数（作家別正解率）", "同値（MAP）", "同値（作家別正解率）"], wins, "rrrrrr"),
+        *md_table(["L", "Test 作品", *head], table, "rl" + "r" * len(head)),
+        *source_line("map", "balanced_accuracy"),
     ]
 
 
@@ -565,7 +715,7 @@ def make_report(run_dir: Path) -> Path:
         *section_overview(res, h),
         *sub_notice,
         *notice,
-        *section_core(res, h),
+        *section_core(res, h, fig_dir),
         *section_variants(res),
         *section_main_table(res, h, features),
         *section_distributions(res, h, features, fig_dir),

@@ -149,7 +149,8 @@ uv run python scripts/inspect_and_extract_corpus.py
 - **本採用（既定）**：各特徴量の採用仕様．`configs/default.yaml` の `features.<特徴量 ID>.params` ．主結果はこの設定で報告．
 - **アブレーション**：本採用から 1 引数だけ差し替えた比較条件．`configs/default.yaml` の `features.<特徴量 ID>.ablations` に列挙し， `scripts/run_experiments.py` の `--ablation` で追加実行（実行するチャンク長は `experiment.ablation_chunk_chars` ）．例：A の `scaling=minmax` ，B の内容語対照 `target_pos=[名詞, 動詞, 形容詞]` ，D の `n_components` $\in \{8, 16, 64\}$ ．
   - 複数の引数を同時に差し替える条件は `features.<特徴量 ID>.combinations` に `params` の部分辞書（2 引数以上）として列挙し，同じく `--ablation` で追加実行．例：B の内容語対照 × 語ブロックのみ `{target_pos: [名詞, 動詞, 形容詞], blocks: words}` （ `plans/025-b-blocks.md` ）．
-  - `report.md` 冒頭の主結果表（B の付属語 vs 内容語対照，設定キー `report.core_comparison` ）は，これらの条件から `blocks` $\in$ {`words`, `all`, `pos_bigram`} ごとに付属語と内容語対照の組を `params` で照合して作成（ `words` が主）．
+  - `--ablation` の有無によらず全チャンク長（ `chunking.target_chunk_chars` ）で実行する条件は `features.<特徴量 ID>.all_chunk_chars` に `params` の部分辞書（1 引数以上）として列挙．`ablations` ・ `combinations` と同じ差し替えは同じ設定名の 1 条件にまとめ，全チャンク長で実行．B は主結果の対照条件（付属語 × `words` ，内容語 × `words` ，内容語 × `all` ．付属語 × `all` は本採用）を指定（ `plans/006-integration-and-eval.md` ）．`pos_bigram` は併記用のため `ablations` のみ．
+  - `report.md` 冒頭の主結果表（B の付属語 vs 内容語対照，設定キー `report.core_comparison` ）は，これらの条件から `blocks` $\in$ {`words`, `all`, `pos_bigram`} ごとに付属語と内容語対照の組を `params` で照合して作成（ `words` が主）．全チャンク長の表，チャンク長別推移の図，Inter-work（間引きあり）の Test 作品ごとの付属語 vs 内容語（ `words` ）の表と付属語が上回る作品数を含む．
 - **ベースライン `base`**：文字 unigram（1 文字）の相対頻度（出現回数 ÷ 総文字数）．`src/features/char_unigram.py` の `CharUnigramExtractor` （設定キー `features.base` ）．A～D の比較の基準．
 
 ---

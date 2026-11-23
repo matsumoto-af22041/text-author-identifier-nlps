@@ -40,8 +40,10 @@
 - 主結果表として，B の付属語（既定）と内容語対照（ `target_pos=[名詞, 動詞, 形容詞]` ）の Intra-work / Inter-work 比較を `report.md` の冒頭に出力（Core Message の検証）．比較は `blocks=words` （語ブロック単独）を主とし，`blocks=all` （結合版）と `blocks=pos_bigram` を併記（025，2026-11-23 決定）．README のアブレーションの説明に `combinations` （複数引数の同時差し替え）を追記．B の形態素解析キャッシュ（025）による全 $L$ 実行時の最大 RSS をスモーク実行で測り報告．
 - 類似度ギャップの主指標はマクロ版 `delta_s_macro` （ミクロ版 `delta_s_micro` を併記）．Inter-work（LOWO 9 fold）の作家別正解率の平均・作家別 F 値の平均（および参考の `accuracy` ）は全 fold の混同行列を合算する Pooled Out-of-Fold で算出．同点件数・ゼロベクトル件数（008）を結果表に併記．
 - `scripts/plot_results.py` の report.md にある「全 9 fold」の固定文言を，実際の fold 数（`run_meta.json` または結果の `num_folds` ）から生成するよう修正（013 の 8 作品版で不正確になるため）．
-- 作品数の偏りの補助実験：013 で追加した `--exclude-works` により，A～D についても漱石から 1 作品ずつ除いた 3 通りを実行し，`scripts/summarize_exclusion.py` で 9 作品版との差分を報告．
-- 重心の割り増しの実測：A～D についても `scripts/measure_centroid_norm.py` （015）を実行し，作家別の $\bar{\rho}_a$ と $1 / \|\hat{c}_a\|$ を報告．
+- **主結果の対照条件を全チャンク長で実行（2026-11-23 決定）**：`report.core_comparison` の B の 3 条件（付属語 × `words` ，内容語 × `words` ，内容語 × `all` ．付属語 × `all` は本採用， `pos_bigram` は併記用）を，`--ablation` なしの通常実行でも $L \in \{100, 500, 1000\}$ のすべてで生成する．他のアブレーションは従来どおり $L = 500$ のみ．実装方法（例：`features.B` に全 $L$ で常時実行する条件の組を指定するキー）は `scripts/run_experiments.py` を確認して決め，README と config のコメントに記載．`report.md` の主結果表とチャンク長別推移に全 $L$ の付属語 vs 内容語を出す．
+- **作品ごとの一貫性（2026-11-23 決定）**：主結果の Inter-work（間引きあり）について，Test 作品（9 fold）ごとに付属語 × `words` と内容語 × `words` の作家別 MAP の平均に相当する値（その fold の Test チャンクの AP の平均）と作家別正解率を求め，付属語が上回る作品数を `report.md` に表で出す（全 $L$ ）．5 シードの ± は間引きの乱数によるばらつきのみで作品の違いによるばらつきを含まない旨を注記．
+- 作品数の偏りの補助実験：013 で追加した `--exclude-works` により，A～D についても漱石から 1 作品ずつ除いた 3 通りを実行し，`scripts/summarize_exclusion.py` で 9 作品版との差分を報告（スクリプトの現行形式への対応は 027．除外 run は 027 の Full Experiment として研究者が実行）．
+- 重心の割り増しの実測（027 で実施）：A～D についても `scripts/measure_centroid_norm.py` （015）を実行し，作家別の $\bar{\rho}_a$ と $1 / \|\hat{c}_a\|$ を報告．
 - MRR は悲観的順位（008）のため，`knn_mode="global"` では上位 $k$ 外の作家の同点で値が低く出る． `report.md` の MRR の考察は重心法と `per_author` を主とし，global の MRR にはその旨を注記．
 - 008 以前の出力（`outputs/smoke_base/` 等，混同行列が (C, C) の旧形式）は新しい `plot_results.py` で読めないため，再実行で作り直すこと．
 - `report.md` の各図表に，使用した数式の出典（講義資料の回・頁，または `plans/research-context.md` の「講義資料で補えない箇所（独自設計）」）を 1 行で併記．
@@ -71,3 +73,8 @@
 - **Command**: `uv run python scripts/run_experiments.py --config configs/default.yaml --ablation`
 - **Expected Runtime & Resources**: 未計測．Executor がスモーク実行の所要時間から外挿して報告（CPU のみ，RAM 8～16GB 想定）
 - **Outputs**: `outputs/<run-name>/` （ `run_meta.json` ，結果 CSV / JSON，図， `report.md` ）
+- **作品除外の補助実験（上記の後，研究者が実行，027 で準備済み）**：
+  - `uv run python scripts/run_experiments.py --config configs/default.yaml --features A B C D --splits inter --exclude-works <作品> --run-name excl_<略称>_ABCD` を 坊っちゃん / こころ / 三四郎 の 3 通り（ `--splits inter` で短縮，B の対照 3 条件を含むため 1 回 11～12 分の見込み）．
+  - `uv run python scripts/summarize_exclusion.py --features A B C D --baseline <上記 Full Experiment の run 名> --excluded excl_bocchan_ABCD excl_kokoro_ABCD excl_sanshiro_ABCD --out-dir outputs/exclusion_summary_ABCD`
+  - 重心の割り増し：`uv run python scripts/measure_centroid_norm.py --features A B C D --chunk-chars 500 --runs A=<run> B=<run> C=<run> D=<run> --identity-tol 1e-9 --out-dir outputs/centroid_norm_ABCD` （Full Experiment の run で再実行）．
+  - Executor は本チケットの残り作業の完了時に，上記コマンドの引数が実装と一致することを確認して報告．

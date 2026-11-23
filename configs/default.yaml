@@ -80,6 +80,8 @@ evaluation:
 #   params：コンストラクタ引数（本採用仕様）．キー名は各モジュールの __init__ 引数と一致させること
 #   ablations：--ablation 指定時に 1 引数ずつ差し替えて追加実行する値（本採用値は含めない）
 #   combinations：--ablation 指定時に複数引数を同時に差し替えて追加実行する条件の組（任意，各要素は params の部分辞書）
+#   all_chunk_chars：--ablation の有無によらず全チャンク長（chunking.target_chunk_chars）で実行する条件（任意，各要素は params の部分辞書）．
+#     ablations・combinations と同じ差し替えは同じ設定名の 1 条件にまとめ，全チャンク長で実行（plans/006）
 features:
     base:
         description: 文字 unigram 相対頻度（ベースライン）
@@ -98,6 +100,9 @@ features:
         ablations: {token_key: [lemma], target_pos: [[助詞, 助動詞, 接続詞, 連体詞, 感動詞], [名詞, 動詞, 形容詞]], blocks: [pos_bigram, words]}
         # 内容語対照 × 語ブロックのみ（Core Message の主結果表の統制比較，plans/025）
         combinations: [{target_pos: [名詞, 動詞, 形容詞], blocks: words}]
+        # 主結果（report.core_comparison）の対照条件：付属語 × words，内容語 × words，内容語 × all（付属語 × all は本採用）．
+        # pos_bigram は併記用のため ablations のみ（experiment.ablation_chunk_chars で実行）
+        all_chunk_chars: [{blocks: words}, {target_pos: [名詞, 動詞, 形容詞], blocks: words}, {target_pos: [名詞, 動詞, 形容詞]}]
     C:
         description: 内容語（名詞・動詞・形容詞）の TF-IDF（plans/004）
         class: src.features.word_tfidf.WordTFIDFExtractor
@@ -114,7 +119,8 @@ experiment:
     # 既定で実行する特徴量（--features で上書き可能）
     features: [A, B, C, D]
     splits: [intra, inter]
-    # アブレーション（ablations・combinations）を実行するチャンク長（report.headline.chunk_chars と一致させる）
+    # アブレーション（ablations・combinations）を実行するチャンク長（report.headline.chunk_chars と一致させる）．
+    # features.<key>.all_chunk_chars の条件はこの設定によらず全チャンク長で実行
     ablation_chunk_chars: [500]
     output_dir: outputs
 
@@ -128,8 +134,9 @@ report:
     # 最良モデル選択の基準（Inter-work の Pooled 指標のシード平均，本採用の特徴量設定のみ対象）
     best_model_metric: balanced_accuracy
     # report.md 冒頭の主結果表（Core Message：B の付属語 vs 内容語対照，plans/006，plans/025）
-    #   本採用の params から param と blocks だけを差し替えた条件を照合（--ablation で
-    #   experiment.ablation_chunk_chars のチャンク長に生成される．headline.chunk_chars を含めること）
+    #   本採用の params から param と blocks だけを差し替えた条件を照合．words・all の対照条件は
+    #   features.B.all_chunk_chars により --ablation なしでも全チャンク長で生成，pos_bigram は --ablation で
+    #   experiment.ablation_chunk_chars のチャンク長のみ（headline.chunk_chars を含めること）
     #   blocks の先頭が主（語ブロック単独），以降は併記．pos_bigram は target_pos が出力に影響しないため付属語側の 1 行のみ
     core_comparison:
         feature: B

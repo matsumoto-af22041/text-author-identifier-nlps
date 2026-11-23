@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～026．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～027．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -24,7 +24,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～026．002・0
 | 003 | [feature-b-pos-function](./003-feature-b-pos-function.md) | 2 | 001 | Done |
 | 004 | [feature-c-word-tfidf](./004-feature-c-word-tfidf.md) | 2 | 001 | Done |
 | 005 | [feature-d-lsi](./005-feature-d-lsi.md) | 2 | 004 | Done |
-| 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008, 022 | In Progress |
+| 006 | [integration-and-eval](./006-integration-and-eval.md) | 3 | 002, 003, 004, 005, 008, 022, 027 | Done |
 | 009 | [presentation-lecture-alignment](./009-presentation-lecture-alignment.md) | 4 | - | Done |
 | 012 | [c-results-and-presentation](./012-c-results-and-presentation.md) | 4 | 004, 008, 009 | Done |
 | 013 | [soseki-two-work-supplement](./013-soseki-two-work-supplement.md) | 3 | 004, 008 | Done |
@@ -41,6 +41,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～026．002・0
 | 024 | [headline-centroid](./024-headline-centroid.md) | 3 | 023 | Done |
 | 025 | [b-blocks](./025-b-blocks.md) | 2 | 003 | Done |
 | 026 | [shared-morph-cache](./026-shared-morph-cache.md) | 3 | 025 | Done |
+| 027 | [aux-scripts-new-format](./027-aux-scripts-new-format.md) | 3 | 022 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009 | Todo |
 
 ## Review Notes
@@ -148,6 +149,14 @@ Orchestrator の委譲対象：000・001・004・006～010・012～026．002・0
   - 主結果（ $L = 500$ ，`words` ）：Inter-work の作家別 MAP の平均は付属語 0.367 > 内容語 0.335，作家別正解率の平均 0.524 > 0.338．Intra-work では逆転（MAP 0.404 < 0.473，作家別正解率の平均 0.670 < 0.887）．仮説と整合する向きだが Inter-work の MAP の差は 0.03．
   - Full Experiment の見積もり：13～15 分，最大 RSS 1.5～2 GB．
   - 未完了：作品除外の補助実験（`summarize_exclusion.py` ）と重心の割り増しの実測（`measure_centroid_norm.py` ）は 022 以前の出力形式が前提で実行不可．主結果の対照条件は `--ablation` で $L = 500$ のみ生成．
+- **027（2026-11-23 レビュー済み）**：`summarize_exclusion.py` と `measure_centroid_norm.py` を現行の出力形式に対応（run 名は必須引数，`run_meta.json` の間引きの記録・混同行列・`folds.csv` と照合して不一致なら停止）．`base` と C の $L = 500$ は 015 の `author_stats.csv` と 432 行で差 0.0，013 の除外集計とも間引きなしの 8 行で一致．
+  - 割り増し係数 $1 / \|\hat{c}_a\|$ （ $L = 500$ ，間引きあり，fold 平均）：A 1.15～1.31，B 1.06～1.08，`base` 1.08～1.11，C 3.60～4.04，D 2.35～2.76．A・B は作家差が小さく重心法の割り増しの偏りは小さい．D は間引きなしで漱石 3.49 と大きく，間引きで 2.76 に縮小．重心法と正規化平均の予測一致率は D が最低（0.889～0.923，最小の fold で 0.790）．
+  - A の恒等式の誤差が既定の許容値 1e-10 を超える（最大 3.1e-10，コサインの分母の eps によると推定）ため A・B・D は 1e-9 で実行．
+  - 作品除外の本番（A～D，3 通り，計約 25 分）は 006 の Full Experiment の後に研究者が実行．コマンドは 027 の Executor 報告に基づき 006 に記載．
+- **006（2026-11-23 レビュー済み）**：残り作業として `features.<ID>.all_chunk_chars` （ `--ablation` の有無によらず全 $L$ で実行する条件）を追加し，B の対照 3 条件を指定．`report.md` に全 $L$ の主結果表，チャンク長別推移の図，作品ごとの一貫性の表を追加．スモーク（A～D， $L = 1000$ ）119 秒・最大 RSS 0.94 GB，2 回で `summary.csv` 1540 行が完全一致．作品別の値の重み付き平均が Pooled 値と一致（最大差 1.1e-16）．
+  - 主結果（Inter-work，間引きあり，`words` ，作家別 MAP の平均）：付属語 / 内容語 = 0.293 / 0.279（ $L = 100$ ），0.367 / 0.335（500），0.419 / 0.370（1000）．Intra-work では全 $L$ で内容語が上．
+  - 作品ごとの一貫性：MAP で付属語が上回るのは各 $L$ とも 7/9 作品．寺田寅彦の 2 作品（『映画芸術』『柿の種』）は全 $L$ で内容語が上．随筆で作品間の題材が近いため内容語も作品をまたいで共有される可能性（仮説）を考察で検討．9 作品のため検定はしない．
+  - Full Experiment の見積もり：17～19 分，最大 RSS 1.5～2 GB．作品除外の run は 1 回 11～12 分．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
