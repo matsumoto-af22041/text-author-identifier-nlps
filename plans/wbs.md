@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～045．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～046．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -59,7 +59,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～045．002・0
 | 042 | [slides-requirements-revision](./042-slides-requirements-revision.md) | 4 | 041 | Done |
 | 044 | [slides-supplement-revision](./044-slides-supplement-revision.md) | 4 | 042 | Done |
 | 045 | [slides-qa-consistency](./045-slides-qa-consistency.md) | 4 | 044 | Done |
-| 043 | [submission-package](./043-submission-package.md) | 4 | 045 | Todo |
+| 043 | [submission-package](./043-submission-package.md) | 4 | 045 | Done |
+| 046 | [submission-fixes](./046-submission-fixes.md) | 4 | 043 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes

@@ -718,7 +718,8 @@ def main() -> None:
     if not args.no_report:
         from plot_results import make_report
 
-        make_report(run_dir)
+        # plot_results.py の CLI の既定（--out-dir は run_dir）と同じ出力先．設定は本実行と同じファイル
+        make_report(run_dir, run_dir, args.config)
 
 
 if __name__ == "__main__":
