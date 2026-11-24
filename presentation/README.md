@@ -21,6 +21,20 @@
 - `outputs/` を直接見る場合も run 名を併記．
 - 古い run（ `c_only` ， `base_c_022` 等）の数値は使わない．
 
+## 発表スライドの生成
+
+- 発表スライドは `slides.pptx` の 1 ファイル．修正は生成スクリプト（ `scripts/build_slides.py` ）と内容のデータ（ `slides_content.yaml` ）で行い，pptx を直接編集しない（039）．
+- 内容は storyline の各スライドの「載せるデータ・主張・出典」の要約．新しい数値・主張は加えない．配色・フォント・縦横比は元のスライドのテーマから読み取った値（ `slides_content.yaml` の `theme` ）．
+- 再現コマンド：
+
+```sh
+uv run python scripts/plot_slide_figures.py   # グラフ A・C・F（figures/a_ablation.png，c_intra_inter.png，classifier_comparison.png）を full_006 から描画
+uv run python scripts/build_slides.py         # slides.pptx を生成
+uv run python scripts/check_slides.py         # 構成・数値・書き方・個人名・はみ出しの検査（違反があれば終了コード 1）
+```
+
+- `check_slides.py` の検査の基準はスクリプト冒頭に記載．数値は `slides_content.yaml` の `num_sources` で指定した storyline・qa・slides_d の範囲と照合．
+
 ## 図
 
 - `figures/` の図を使う．

@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～038．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～039．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～038．002・0
 | 036 | [storyline-restructure](./036-storyline-restructure.md) | 4 | 035 | Done |
 | 037 | [member-slides-review](./037-member-slides-review.md) | 4 | 036 | Done |
 | 038 | [storyline-fixes-and-gitignore](./038-storyline-fixes-and-gitignore.md) | 4 | 037 | Done |
+| 039 | [build-slides](./039-build-slides.md) | 4 | 038 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes
@@ -216,6 +217,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～038．002・0
   - 出力：`outputs/review_037/` （`review_slides.csv` 57 行，`writing_rules.csv` 等，個人名なし）．
 - **038（2026-11-24 レビュー済み）**：`.gitignore` に `presentation/orig.*` ・ `presentation/*.pdf` ・ `presentation/*_提出用.*` を追加（図・Markdown は無視されないことを確認）．氏名の表記を「担当 A」～「担当 D」「リーダー」に統一．補助 S8 を `full_006` の 4×4 行列（全 5 シード合算）の事実に修正（A～D とも 4 作家中 3 作家で対角が行の最大，例外は A・B で漱石，C・D で太宰）．出典一覧からチケット番号を削除し，本文で使う講義の頁（第 2 回 p.36，第 3 回 p.33，第 5 回 p.36，第 6 回 p.42）を講義資料で確認して追加．補助 S7 の表の崩れと `slides_d.md` のスライド番号を修正．034 の監査で不一致 0．
   - 残り（スライド作成時に対応）：`slides_d.md` の話す時間が storyline と不一致，冒頭の作成メモにチケット番号．
+- **039（2026-11-24 レビュー済み）**：`scripts/build_slides.py` （内容は `presentation/slides_content.yaml` ）で `presentation/slides.pptx` （本編 21，出典 1，補助 14 の計 36 枚）を生成，`scripts/check_slides.py` で数値トークン 593 件・書き方・個人名・メタデータを検査（違反 0，わざと入れた違反 5 種を検出）．グラフ A・C・F を `scripts/plot_slide_figures.py` で追加（描画値 92 件が `full_006` と一致）．`python-pptx` を開発用依存に追加（研究者承認）．PDF の書き出しは PowerPoint を指定した AppleScript（最初に試した Keynote は権限エラーで失敗，これが Keynote が開いた原因）．
+  - 残課題：数値の照合はトークン単位で，同じ範囲の別の値への取り違えは検出できない（037 の Layer 1 のような指標との個別照合が未実装）．Slide 20 の図 B と S8 の分布図が小さく読めない．Slide 20 に，1 作家語除外で作家別正解率の平均の差も縮む（+0.186 → +0.085）旨がなく，research-context の報告方針に照らして不足．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）
