@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～037．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～038．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -52,6 +52,7 @@ Orchestrator の委譲対象：000・001・004・006～010・012～037．002・0
 | 035 | [presentation-audit-fixes](./035-presentation-audit-fixes.md) | 4 | 034 | Done |
 | 036 | [storyline-restructure](./036-storyline-restructure.md) | 4 | 035 | Done |
 | 037 | [member-slides-review](./037-member-slides-review.md) | 4 | 036 | Done |
+| 038 | [storyline-fixes-and-gitignore](./038-storyline-fixes-and-gitignore.md) | 4 | 037 | Done |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes
@@ -213,6 +214,8 @@ Orchestrator の委譲対象：000・001・004・006～010・012～037．002・0
   - 個人名・秘匿情報：スライド 1・2・10～18・26 の本文と発表者ノートに氏名・学籍番号と見られる文字列，pptx のメタデータ（最終更新者）に個人名と見られる文字列（文字列は記録しない）．元の pptx・pdf はコミットしない．
   - storyline 側の誤り：補助 S8 の「A・B では 4 作家中 3 作家で本人がいちばん近い」は C・D も同じで不正確．出典一覧にチケット番号が入り，本文で使う第 6 回 p.42・第 2 回 p.36 が出典一覧にない．
   - 出力：`outputs/review_037/` （`review_slides.csv` 57 行，`writing_rules.csv` 等，個人名なし）．
+- **038（2026-11-24 レビュー済み）**：`.gitignore` に `presentation/orig.*` ・ `presentation/*.pdf` ・ `presentation/*_提出用.*` を追加（図・Markdown は無視されないことを確認）．氏名の表記を「担当 A」～「担当 D」「リーダー」に統一．補助 S8 を `full_006` の 4×4 行列（全 5 シード合算）の事実に修正（A～D とも 4 作家中 3 作家で対角が行の最大，例外は A・B で漱石，C・D で太宰）．出典一覧からチケット番号を削除し，本文で使う講義の頁（第 2 回 p.36，第 3 回 p.33，第 5 回 p.36，第 6 回 p.42）を講義資料で確認して追加．補助 S7 の表の崩れと `slides_d.md` のスライド番号を修正．034 の監査で不一致 0．
+  - 残り（スライド作成時に対応）：`slides_d.md` の話す時間が storyline と不一致，冒頭の作成メモにチケット番号．
 - **発表資料側の未修正事項（007 で対応）**：Q3（チャンク長のばらつき），Q4（端数破棄率），Q11（ $k$ 増大時の漸近先）の記述修正
 
 ## Pending Decisions（研究者の判断待ち）

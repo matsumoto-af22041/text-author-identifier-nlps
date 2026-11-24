@@ -10,6 +10,14 @@ outputs/**
 # 講義資料・配布資料（受講者の実名を含み，著作権は大学側にあるため Git 管理対象外）
 references/
 
+# 発表資料（発表スライドは presentation/ に 1 ファイルのみ置いて Git で版を管理）
+# 担当から上がった元のスライド（個人名を含むため Git 管理対象外）
+presentation/orig.*
+# pptx から書き出す PDF（派生物）
+presentation/*.pdf
+# 提出直前に氏名を書き込んだ版
+presentation/*_提出用.*
+
 # ============================== Python ==============================
 # Byte-compiled / optimized / DLL files
 __pycache__/
