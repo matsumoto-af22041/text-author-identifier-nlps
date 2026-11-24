@@ -17,6 +17,8 @@ presentation/orig.*
 presentation/*.pdf
 # 提出直前に氏名を書き込んだ版
 presentation/*_提出用.*
+# PowerPoint 等が開いている間に作る一時的なロックファイル
+presentation/~$*
 
 # ============================== Python ==============================
 # Byte-compiled / optimized / DLL files

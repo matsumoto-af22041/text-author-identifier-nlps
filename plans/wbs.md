@@ -12,7 +12,7 @@
 
 ## Tasks
 
-Orchestrator の委譲対象：000・001・004・006～010・012～039．002・003・005 は班員担当．
+Orchestrator の委譲対象：000・001・004・006～010・012～045．002・003・005 は班員担当．
 
 | ID | Ticket | Phase | Depends On | Status |
 |---|---|---|---|---|
@@ -54,6 +54,12 @@ Orchestrator の委譲対象：000・001・004・006～010・012～039．002・0
 | 037 | [member-slides-review](./037-member-slides-review.md) | 4 | 036 | Done |
 | 038 | [storyline-fixes-and-gitignore](./038-storyline-fixes-and-gitignore.md) | 4 | 037 | Done |
 | 039 | [build-slides](./039-build-slides.md) | 4 | 038 | Done |
+| 040 | [slides-typesetting](./040-slides-typesetting.md) | 4 | 039 | Done |
+| 041 | [slides-content-revision](./041-slides-content-revision.md) | 4 | 040 | Done |
+| 042 | [slides-requirements-revision](./042-slides-requirements-revision.md) | 4 | 041 | Done |
+| 044 | [slides-supplement-revision](./044-slides-supplement-revision.md) | 4 | 042 | Done |
+| 045 | [slides-qa-consistency](./045-slides-qa-consistency.md) | 4 | 044 | Done |
+| 043 | [submission-package](./043-submission-package.md) | 4 | 045 | Todo |
 | 007 | [qa-verification](./007-qa-verification.md) | 4 | 001, 006, 009, 029 | Done |
 
 ## Review Notes

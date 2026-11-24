@@ -4,7 +4,11 @@
 # 修正はこのファイル（と生成スクリプト）で行い，pptx を直接編集しない．
 #
 # 書式（文字列中のマークアップ）：
-#   _{x}   下付き（例：μ_{same}）       ^{x}   上付き（例：‖x‖^{2}）
+#   $...$  数式（LaTeX の記法．例：$\mu_{\text{same}}$，$\lVert \vec{x} \rVert^2$）．scripts/build_slides.py が 1 式ずつ lualatex で
+#          コンパイルした画像（代替テキストに元の LaTeX）として置く．短い記号（例：$L = 500$，$K$，$\hat{c}_a$）も画像にし，
+#          書体を Computer Modern にそろえる（041）．本文・表のセル・定義の一覧・主張の帯・強調枠のどこにでも書ける．
+#          段落の途中の複雑な式（分数・上付き・添字付きの等式等）は避け，独立の行（数式だけの段落）に出す．PowerPoint 上で式を編集しない．
+#          バックスラッシュを含む文字列は YAML の単一引用符で書く．発表者ノート（notes）は平文のまま（数式の記法を使わない）．
 #   [^n]   出典の番号（右肩の [n]，スライド下部の footnotes の n 番目と対応）
 #   **x**  太字
 # ブロック：
@@ -12,10 +16,19 @@
 #   table: {header: [...], rows: [[...]], widths: [比率, ...], size: pt}   セル内の改行は "\n"
 #   figure: パス（presentation/ からの相対），h: 高さの上限（インチ）
 #   figures: {paths: [...], cols: 列数, h: 高さの上限}
-#   diagram: concept（Slide 1 の概念図）| split（Slide 4 の分割の図）
+#   diagram: concept（Slide 2 の概念図）| split（Slide 7 の分割の図）| a_blocks（Slide 9 の A のブロックの構成）
+#            | svd（Slide 18 の特異値分解の模式図）．h で高さ（インチ）を変えられる
+# スライドの layout：cover（表紙：title，subtitle，members: [[役割, 氏名欄], ...]）| single（body）| split（left，right，ratio）
 #   box: 強調枠の文字列        text: 補足の文字列（muted: true で薄い文字）
+#   deflist: {rows: [[用語, 説明] | [文字列] | [用語, [説明の箇条書き, ...]]], widths: [左, 右], size: pt}
+#            定義の一覧（罫線なしの 2 列の表．左列：用語・記号，右列：説明．1 要素の行は 2 列にまたがる）
+# 照合の指定（check_slides.py．指標・条件まで出典の CSV・storyline の表のセルと照合）：
+#   table の refs: {vars: [行ごとの置換（null は照合しない）], cols: [列ごとの雛形（{v} や {s} 等を置換）], cells: {"行,列": 指定}}
+#   スライドの num_refs: [{at: 本文の文字列の一部, refs: [数値ごとの指定（null は照合しない）]}]
+#   指定の書き方は check_slides.py の RefSources（summary:<key>:<列>，per_work:<L>:<作品>:<列>，sens:<L>:<条件>:<列>，
+#   stats:<key>:<行>,<列>，<指定> - <指定>，story:<見出し>#<n>|<行>|<列>）
 # num_sources：本文・表・ノートの数値を照合する資料の範囲（check_slides.py）．
-#   storyline:<スライド番号>  storyline の表の該当行（例：storyline:Slide 8，storyline:S1）
+#   storyline:<スライド番号>  storyline の表の該当行（例：storyline:Slide 9，storyline:S2）
 #   storyline#<見出し>        storyline の見出し（####／##）から次の見出しまで
 #   qa#<見出し>               qa_defense_matrix.md の見出し（###）から次の見出しまで
 #   slides_d                  slides_d.md の全体
@@ -26,6 +39,20 @@ theme:
   slide_height_in: 7.5
   font_latin: Yu Gothic
   font_ea: 游ゴシック
+  math:
+    # 数式の画像化（scripts/build_slides.py）．コマンドは PATH から探す（無ければ --lualatex / --pdftocairo で指定）
+    lualatex: lualatex
+    pdftocairo: pdftocairo
+    dpi: 600
+    cache_dir: outputs/slides_math
+  figures:
+    # scripts/plot_slide_figures.py のスライド用の再描画の大きさ（インチ，スライドに置く大きさ [幅, 高さ]）と文字の大きさ（pt）
+    font_pt: 9
+    core: [5.85, 4.8]
+    composition: [5.3, 1.85]
+    chunk_length: [6.6, 4.3]
+    s8_heatmaps: [5.0, 4.15]
+    s8_distributions: [4.0, 4.15]
   colors:
     text: "222222"       # dk1
     muted: "8C8C8C"      # dk2
@@ -41,34 +68,23 @@ deck:
   title: 青空文庫の文体・表現類似度に基づく著者識別システム
 
 slides:
-  # ------------------------------------------------------------------ 導入と共通の枠組み
+  # ------------------------------------------------------------------ 表紙・導入と共通の枠組み
   - id: "1"
     kind: main
-    section: 導入
-    layout: title
+    section: 表紙
+    layout: cover
     title: 青空文庫の文体・表現類似度に基づく著者識別システム
-    claim: 4 つの観点で類似度を測り，未知作品の著者を識別できる観点とその理由を調べる
-    left:
-      - box: "問い：4 つの観点で文章の類似度を測り，未知作品の著者を識別できるのはどれか．できないならなぜか"
-      - table:
-          header: [担当, 範囲]
-          rows:
-            - [リーダー, 導入・統合比較・結論]
-            - [担当 A, 表層・文字づかいと句読点]
-            - [担当 B, 品詞の並びと付属語]
-            - [担当 C, 使われている内容語（TF-IDF）]
-            - [担当 D, 内容語の共起による潜在意味（LSI）]
-          widths: [0.3, 0.7]
-          size: 14
-    right:
-      - diagram: concept
-      - text: "成功の条件：同じ著者の文章同士なら類似度が高く，違う著者同士なら低くなる類似度の測り方を見つけること"
-    footnotes: ["構想発表資料 p.4"]
+    members:
+      - [リーダー, （氏名）]
+      - [担当 A, （氏名）]
+      - [担当 B, （氏名）]
+      - [担当 C, （氏名）]
+      - [担当 D, （氏名）]
+    footnotes: []
     notes:
-      time: 30 秒
+      time: 15 秒
       points:
-        - 4 つの観点で類似度を測り，未知作品の著者を識別できる観点とその理由を調べる．
-        - 成功の条件は「同じ著者の文章同士なら類似度が高く，違う著者同士なら低くなる『類似度の測り方』を見つけること」．
+        - 研究タイトルと班の紹介．
         - 氏名・学籍番号は提出直前に研究者が提出用の版に記入（この版には書かない）．
       runs: []
     num_sources: ["storyline:Slide 1"]
@@ -76,50 +92,153 @@ slides:
   - id: "2"
     kind: main
     section: 導入
-    title: 記号・用語の定義（発表全体で使うもの）
-    claim: 以降のすべての値は，特徴量を使わない予測の基準値と比べて読む
+    title: 研究の問い・仮説と班の担当
+    claim: 4 つの観点で類似度を測り，未知作品の著者を識別できる観点とその理由を調べる
     layout: split
-    ratio: 0.6
     left:
-      - bullets:
-          - "L：チャンク分割の目標文字数（L ∈ {100, 500, 1000}）"
-          - "作品内分割（Intra-work）：各作品のチャンクを Train / Test に分ける（5 シード）[^1]"
-          - "作品間分割（Inter-work）：1 作品を丸ごと Test に回す（9 fold）[^1]"
-          - "間引き：Train チャンク数を作家ごとに最少の作家の数にそろえる[^1]"
-          - "コサイン類似度：cos(d_{i}, q) = (d_{i} · q) / (‖d_{i}‖ ‖q‖)[^2]"
-          - "重心法：作家の Train チャンクの平均ベクトルとの類似度が最大の作家と判定[^3]"
-          - "類似度ギャップ：ΔS = μ_{same} − μ_{diff}（同じ特徴量内の比較のみ）[^1]"
-        size: 16
-    right:
+      - box: "問い：4 つの観点で文章の類似度を測り，未知作品の著者を識別できるのはどれか．できないならなぜか"
+      - text: "仮説：内容によらない特徴は，作品が変わっても本人らしさが残る"
       - table:
-          header: [指標, 基準値]
+          header: [担当, 担当したこと]
           rows:
-            - ["作家別 MAP の平均[^4]", "0.260"]
-            - ["作家別正解率の平均[^5]", "0.25"]
-            - ["作家別 F 値の平均[^6]", "0.233"]
-            - ["MRR[^4]", "0.521"]
-          widths: [0.68, 0.32]
+            - [リーダー, "データの抽出\n評価器\n統合実験"]
+            - [担当 A, 表層（文字づかいそのもの）と句読点]
+            - [担当 B, 品詞の並びと付属語]
+            - [担当 C, 内容語（TF-IDF）]
+            - [担当 D, 内容語の共起による潜在意味（LSI）]
+          widths: [0.24, 0.76]
+          size: 13
+    right:
+      - diagram: concept
+      - text: "成功の条件：同じ著者の文章同士なら類似度が高く，違う著者同士なら低くなる類似度の測り方を見つけること"
+    footnotes: ["構想発表資料 p.4"]
+    notes:
+      time: 40 秒
+      points:
+        - 4 つの観点で類似度を測り，未知作品の著者を識別できる観点とその理由を調べる．
+        - 仮説は，内容（トピック・固有名詞）によらない特徴（文字づかい・句読点・品詞の並び・付属語）は，作品が変わっても本人らしさが残る，というもの．内容語の特徴は作品が変わると大きく落ちると予想．
+        - 成功の条件は「同じ著者の文章同士なら類似度が高く，違う著者同士なら低くなる『類似度の測り方』を見つけること」．
+        - 担当 A～D は各特徴量（観点）の設計・実装・実験，リーダーはデータの抽出・評価器・統合実験．
+      runs: []
+    num_sources: ["storyline:Slide 2"]
+
+  - id: "3"
+    kind: main
+    section: 導入
+    title: システムの機能と処理の流れ
+    claim: 著者不明の文章を受け取り，各作家との類似度から最も近い作家を推定して返す
+    layout: single
+    body:
+      - diagram: flow
+        h: 2.2
+      - deflist:
+          rows:
+            - ["入力", "著者不明の文章（チャンク）"]
+            - ["出力", "推定した著者と，作家ごとの類似度の順位"]
+            - ["学習", "Train チャンクのみから語彙・IDF・SVD・作家の重心を算出して保存（重みの更新はしない）[^1]"]
+            - ["推定", "Test チャンクは学習済みの変換を通し，重心法で著者を推定[^2]"]
+            - ["評価", "推定した著者と正解の著者を比べ，指標（後述）を求める[^1]"]
+          widths: [0.14, 0.86]
           size: 14
-      - text: "基準値：特徴量を使わない予測（L = 500 の作品間分割，間引きあり）[^1]"
-        muted: true
-      - text: "作家別の値は 4 作家で単純平均（Test の作家構成に左右されない）[^1]"
+    footnotes:
+      - 独自設計
+      - 第 2 回 p.48
+    notes:
+      time: 50 秒
+      points:
+        - 著者不明の文章を受け取り，各作家との類似度から最も近い作家を推定して返すシステム．
+        - 処理の流れは，前処理（作品の抽出・チャンク分割）→ 形態素解析 → 特徴抽出 A～D → コサイン類似度 → 重心法による著者の推定 → 評価．
+        - 「学習」は重みの更新ではなく，Train チャンクのみから語彙・IDF・SVD の射影・作家ごとの重心を求めて保存すること．Test チャンクはその変換を通すだけで，Test の情報は使わない．
+      runs: []
+    num_sources: ["storyline:Slide 3"]
+
+  - id: "4"
+    kind: main
+    section: 導入
+    title: 記号・用語の定義（発表全体で使うもの）
+    claim: 類似度はすべて，チャンクの特徴量ベクトルのコサイン類似度で測る
+    layout: split
+    ratio: 0.5
+    left:
+      - deflist:
+          rows:
+            - ["チャンク", '文の区切りを保ったまま約 500 字ずつまとめたもの（$L = 500$，後述）']
+            - ["作品内分割（Intra-work）", "各作品のチャンクを Train / Test に分ける（5 シード，後述）[^1]"]
+            - ["作品間分割（Inter-work）", "1 作品を丸ごと Test に回す（9 fold）[^1]"]
+            - ["間引き", "Train チャンク数を作家ごとに最少の作家の数にそろえる（後述）[^1]"]
+          widths: [0.36, 0.64]
+          size: 14
+    right:
+      - deflist:
+          rows:
+            - ['$\vec{d}_i$', "Train チャンク $i$ の特徴量ベクトル"]
+            - ['$\vec{q}$', "照会する Test チャンクの特徴量ベクトル"]
+            - ["コサイン類似度", ['$\cos(\vec{d}_i, \vec{q}) = \frac{\vec{d}_i \cdot \vec{q}}{\lVert \vec{d}_i \rVert \lVert \vec{q} \rVert}$[^2]', "A～D 共通の類似度"]]
+            - ['$D_a$', "作家 $a$ の Train チャンクの集合"]
+            - ["重心法", ["重心：作家の Train チャンクの特徴量ベクトルの平均（作家を代表するベクトル）", '$\vec{c}_a = \frac{1}{|D_a|} \sum_{\vec{d}_i \in D_a} \vec{d}_i$[^3]', '$\hat{a} = \mathop{\arg\max}_{a} \cos(\vec{c}_a, \vec{q})$', "作家の重心との類似度が最大の作家と判定"]]
+          widths: [0.3, 0.7]
+          size: 14
     footnotes:
       - 独自設計
       - 第 5 回 p.26，第 3 回 p.25
       - 第 2 回 p.48
-      - 第 5 回 p.31 を参考にした独自設計
-      - 第 5 回 p.28，第 6 回 p.44
-      - 第 5 回 p.28-29
     notes:
-      time: 60 秒
+      time: 40 秒
+      points:
+        - 類似度はすべて，チャンクの特徴量ベクトルのコサイン類似度で測る（A～D 共通）．
+        - 重心法は，作家 a の Train チャンクの特徴量ベクトルの平均（重心）を作家の代表文書とし，照会ベクトルとのコサイン類似度が最大の作家を推定結果とする（第 2 回 p.48 の代表文書による分類）．
+        - チャンクの作り方・5 シード・間引きは Slide 7 で説明．作品間分割は LOWO 9 fold の Pooled 集計．
+      runs: []
+    num_sources: ["storyline:Slide 4"]
+
+  - id: "5"
+    kind: main
+    section: 導入
+    title: 指標の定義と基準値
+    claim: 以降のすべての値は，特徴量を使わない予測の基準値と比べて読む
+    layout: split
+    ratio: 0.55
+    left:
+      - deflist:
+          rows:
+            - ["作家別 MAP の平均", ['$\text{AP} = \frac{1}{R} \sum_{k :\, \text{rel}(k)} P@k$[^1]', '$R$：照会と同じ著者の Train チャンク数，$P@k$：上位 $k$ 件の適合率', "照会ごとの AP を作家ごとに平均し，4 作家で単純平均[^2]"]]
+            - ["作家別正解率の平均", ['$\frac{1}{4} \sum_{a} \frac{n_{a \to a}}{n_a}$[^3]', '$n_a$：作家 $a$ の Test チャンク数，$n_{a \to a}$：そのうち $a$ と判定された数']]
+          widths: [0.25, 0.75]
+          size: 15
+    right:
+      - table:
+          header: [指標, 基準値]
+          rows:
+            - ["作家別 MAP の平均[^1]", "0.260"]
+            - ["作家別正解率の平均[^3]", "0.25"]
+          widths: [0.68, 0.32]
+          size: 12
+          refs:
+            cells:
+              "0,1": "summary:A|L500|inter|bal|cosine|centroid|mean:map_macro_random"
+              "1,1": "summary:A|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"
+      - text: "基準値は特徴量を使わない予測の値（$L = 500$ の作品間分割・間引きあり）[^2]"
+        muted: true
+      - figure: figures/test_composition.png
+        h: 1.85
+      - text: "作家別の値の単純平均は Test の作家構成に左右されない"
+        size: 13
+    footnotes:
+      - 第 5 回 p.31 を参考にした独自設計
+      - 独自設計
+      - 第 5 回 p.28，第 6 回 p.44
+    notes:
+      time: 40 秒
       points:
         - 以降のすべての値は，特徴量を使わない予測の基準値と比べて読む．
         - 作家別の値の単純平均は，Test の作家構成（漱石が約半数）に左右されないため．正解率（全 Test チャンクでの集計）は載せない．
-        - 作品間分割は LOWO 9 fold の Pooled 集計．基準値は L = 500 の Inter-work，間引きありの値．
-      runs: [full_006]
-    num_sources: ["storyline:Slide 2", "storyline#評価データ（指標・図表）」の定義"]
+        - 図の計算：L = 500 の作品間分割（LOWO 9 fold）の各 fold の Test チャンク数を作家ごとに合計（漱石 801，太宰 330，寺田 177，花袋 371，計 1679）．全件を漱石と予測すると，全 Test チャンクでの正解の割合は 801 / 1679 = 0.477，作家別正解率は漱石 1，他の 3 作家 0 で平均 0.25．
+        - 作品間分割は LOWO 9 fold の Pooled 集計．基準値は L = 500 の Inter-work，間引きありの値．導出は補助 S5．
+        - 本編の指標はこの 2 つ．2 つに絞った理由は補助 S4，作家別 F 値の平均と MRR の定義と基準値は補助 S5．
+      runs: [full_006（図は plot_slide_figures.py で full_006 の folds.csv から描画）]
+    num_sources: ["storyline:Slide 5", "storyline#評価データ（指標・図表）」の定義", "storyline#表 1（Slide 6）", "qa#なぜ普通の正解率を使わないのか"]
 
-  - id: "3"
+  - id: "6"
     kind: main
     section: 導入
     title: 対象データの選定（青空文庫 4 作家・9 作品）
@@ -136,6 +255,9 @@ slides:
             - ["計 30 作品", "25"]
           widths: [0.55, 0.45]
           size: 14
+          refs:
+            vars: ["3", "2", "1", "計 30 作品"]
+            cols: ["story:表 1（Slide 6）#1|{v}|作品数", "story:表 1（Slide 6）#1|{v}|作家数"]
       - bullets:
           - "2 作品以上の作家は 25 名中 4 名のみ[^1]"
           - "明治～昭和初期の口語体の作家にそろえる"
@@ -143,7 +265,7 @@ slides:
         size: 16
     right:
       - table:
-          header: [作家, 作品, 文字数, 文数, "チャンク数（L = 500）"]
+          header: [作家, 作品, 文字数, 文数, 'チャンク数（$L = 500$）']
           rows:
             - [夏目漱石, 坊っちゃん, "88,277", "2,708", "168"]
             - [夏目漱石, こころ, "159,983", "5,055", "307"]
@@ -157,17 +279,20 @@ slides:
             - [合計, 9 作品, "886,709", "26,738", "1,679"]
           widths: [0.18, 0.2, 0.2, 0.17, 0.25]
           size: 12
+          refs:
+            vars: [作品=坊っちゃん, 作品=こころ, 作品=三四郎, 作品=惜別, 作品=斜陽, 作品=映画芸術, 作品=柿の種, 作品=蒲団, 作品=田舎教師, 作家=合計]
+            cols: [null, null, "story:表 1（Slide 6）#2|{v}|文字数", "story:表 1（Slide 6）#2|{v}|文数", "story:表 1（Slide 6）#2|{v}|チャンク数 $L = 500$"]
     footnotes: [独自設計]
     notes:
-      time: 45 秒
+      time: 35 秒
       points:
         - 同じ著者の「別の作品」でも類似度が高くなるかを見るため，複数作品がある 4 作家（計 9 作品）を選定．
         - 文語体や翻訳文学を除き，明治～昭和初期の口語体作家に揃えることで「時代の違い」ではなく「著者の違い」を測るデータにした．
-        - 漱石の 3 作品で L = 500 のチャンクの 48%（801 / 1,679）を占め，『映画芸術』は 49 チャンクと最少（Slide 4 の間引きの背景）．
+        - 漱石の 3 作品で L = 500 のチャンクの 48%（801 / 1,679）を占め，『映画芸術』は 49 チャンクと最少（Slide 7 の間引きの背景）．
       runs: [verify_qa_points（Q1），full_006（作品別のチャンク数と照合済み）]
-    num_sources: ["storyline:Slide 3", "storyline#表 1（Slide 3）"]
+    num_sources: ["storyline:Slide 6", "storyline#表 1（Slide 6）"]
 
-  - id: "4"
+  - id: "7"
     kind: main
     section: 導入
     title: 実験設定：作品内分割と作品間分割
@@ -181,79 +306,108 @@ slides:
           - text: "同じ作品のチャンクは題材・登場人物・底本の表記を共有[^1]"
             sub:
               - "Train と Test に分かれると作品の一致で識別できる（トピック漏洩）"
-          - text: "チャンク分割：文単位で目標文字数 L まで束ねる[^2]"
+          - text: "チャンク分割：文単位で目標文字数 $L$ まで束ねる[^2]"
             sub:
-              - "実測 125.8 ± 33.1 字（L = 100）"
-              - "実測 527.3 ± 36.7 字（L = 500）"
-              - "実測 1029.1 ± 42.9 字（L = 1000）"
+              - "$L = 500$：実測 527.3 ± 36.7 字"
           - text: "間引き：作家ごとに最少の作家のチャンク数にそろえる（5 シード）[^3]"
             sub:
               - "間引かないと Train の約半数が漱石"
-        size: 16
+        size: 15
+      - diagram: balance
     footnotes:
       - 第 6 回 p.42，独自設計
       - 第 2 回 p.8，独自設計
       - 独自設計
     notes:
-      time: 60 秒
+      time: 50 秒
       points:
         - 未知の別作品（作品間分割）でも同じ著者なら類似度が高くなるかをメインの検証課題に設定．
         - 同じ小説の別ページ（作品内分割）で類似度が高くなるのは当然（登場人物が同じ）．同じ作品のチャンクが Train と Test に分かれると作品の一致で識別できてしまい精度が過大に出る（トピック漏洩）．これを避ける設計．
         - 文末の表現を壊さないよう，文単位で目標文字数 L まで束ねるチャンク分割（文の定義は第 2 回 p.8）．
         - 漱石の作品は長く，間引かないと Train の約半数が漱石になるため間引く．間引きなしを併記．
+        - 下の図：作品内分割・作品間分割の各分割（fold）で，Train チャンクを作家ごとに一様に抜き出し，最少の作家の数 n_min にそろえる．Test は間引かない．棒の長さは模式．
         - 作品内分割は 5 シード，作品間分割は LOWO 9 fold（Pooled）．
       runs: [verify_qa_points（実測チャンク長），間引きの根拠は 013～015]
-    num_sources: ["storyline:Slide 4"]
+    num_sources: ["storyline:Slide 7"]
 
-  - id: "5"
+  - id: "8"
     kind: main
     section: 導入
-    title: 4 つの類似度観点と判別の方法
+    title: 4 つの類似度観点・共通の条件・使用したツール
     claim: 4 観点とも同じコサイン類似度と重心法で比べ，違いを特徴量だけに絞る
     layout: single
     body:
       - table:
           header: [観点, 特徴量, 何で類似度を測るか]
           rows:
-            - [A, 文字 Bi-gram・記号, 表層・文字づかいと句読点]
+            - [A, 文字 Bi-gram・記号, 表層（文字づかいそのもの）と句読点]
             - [B, 品詞 2-gram・付属語, 品詞の並びと付属語]
             - [C, 内容語 TF-IDF, 使われている内容語]
             - [D, LSI 潜在意味, 内容語の共起による潜在意味]
           widths: [0.1, 0.35, 0.55]
-          size: 16
-      - bullets:
-          - "類似度はコサイン係数のみ[^1]"
-          - "判別は重心法（代表文書による分類）[^2]．作家別上位 k 平均との比較は補助 S5"
-          - "scikit-learn 等を使わず，numpy と fugashi-plus[unidic-lite] のみでフルスクラッチ実装"
-        size: 18
+          size: 15
+      - columns:
+          ratio: 0.5
+          left:
+            - bullets:
+                - text: "A～D に共通の条件[^3]"
+                  sub:
+                    - "類似度はコサイン係数のみ[^1]"
+                    - "判別は重心法（代表文書による分類）[^2]"
+                    - "作品内分割・作品間分割"
+                    - "チャンクは $L = 500$"
+                    - "間引きあり（間引きなしは補助）"
+              size: 15
+            - text: "特記なき値は作品間分割・$L = 500$・間引きあり"
+              muted: true
+          right:
+            - bullets:
+                - text: "使用したツール"
+                  sub:
+                    - "Python 3.13・uv（実行環境）"
+                    - "NumPy：ベクトル・行列演算と SVD"
+                    - "fugashi と UniDic（unidic-lite）：形態素解析"
+                    - "Matplotlib：図の描画"
+                    - "PyYAML：実験設定の読み込み"
+                - "scikit-learn 等の機械学習・類似度計算のライブラリは使わない"
+                - "特徴抽出・コサイン類似度・推定・評価はすべて自作"
+              size: 15
     footnotes:
       - 第 5 回 p.26，第 3 回 p.25
       - 第 2 回 p.48
+      - 独自設計
     notes:
       time: 45 秒
       points:
         - 4 観点とも同じコサイン類似度と重心法で比べ，違いを特徴量だけに絞る．
-        - scikit-learn 等を使わず，numpy と fugashi-plus[unidic-lite] のみで特徴抽出・類似度計算・推論をフルスクラッチ実装．
-        - 図表は全特徴量で重心法にそろえる．
+        - 使用したツールは Python 3.13 と uv，NumPy（ベクトル・行列演算，SVD），fugashi と UniDic（unidic-lite，形態素解析），Matplotlib（図），PyYAML（実験設定）．
+        - scikit-learn 等の機械学習・類似度計算のライブラリは使わず，特徴抽出・コサイン類似度・推定・評価をすべて自作．
+        - 図表は全特徴量で重心法にそろえる．A～D に共通の条件（分割・チャンク長・推論方式・間引き）はこのスライドにまとめ，各パートには固有の条件だけを書く．
       runs: []
-    num_sources: ["storyline:Slide 5"]
+    num_sources: ["storyline:Slide 8"]
 
   # ------------------------------------------------------------------ 担当 A
-  - id: "6"
+  - id: "9"
     kind: main
     section: 担当 A
     title: 【担当 A】定義
     claim: どんな文字の並びを好み，どれくらい句読点を打つかという表層リズムで類似度を測る
     layout: single
     body:
+      - deflist:
+          rows:
+            - ["文字 Bi-gram", "隣り合う 2 文字の組（上位 1000）[^1]"]
+            - ["記号ブロック", "読点・文末記号・開き括弧類の 3 次元[^2]"]
+            - ["二乗ノルム割合", '$\lVert \vec{x}_{\text{block}} \rVert^2 / \lVert \vec{x} \rVert^2$（ブロックがベクトルの長さに占める割合）[^2]']
+            - ["Min-Max 正規化", "各次元を $[0, 1]$ に線形変換（既定と比べる条件のみ）[^2]"]
+          widths: [0.22, 0.78]
+          size: 16
       - bullets:
-          - "文字 Bi-gram：隣り合う 2 文字の組（上位 1000）[^1]"
-          - "記号ブロック：読点・文末記号・開き括弧類の 3 次元[^2]"
           - "値はすべて「出現回数 ÷ 総文字数」の相対頻度[^3]"
           - "平均文長は文末記号率 = 1 / 平均文長 として保持[^4]"
-          - "二乗ノルム割合：‖x_{block}‖^{2} / ‖x‖^{2}（ブロックがベクトルの長さに占める割合）[^2]"
-          - "Min-Max 正規化：各次元を [0, 1] に線形変換（アブレーションのみ）[^2]"
-        size: 20
+          - '比べるベクトル：Test チャンクの $\vec{x}$ と各作家の重心（同じ Bi-gram ＋記号の空間）のコサイン類似度'
+        size: 15
+      - diagram: a_blocks
     footnotes:
       - 第 2 回 p.25
       - 独自設計
@@ -264,10 +418,11 @@ slides:
       points:
         - 「どんな文字の並びを好み，どれくらい句読点を打つか」という表層リズムで類似度を測る．
         - 文字 Bi-gram 上位 1000（第 2 回 p.25 の N-gram を文字に適用）と記号 3 次元（読点・文末記号・開き括弧類）．文書を文字の列とみなす（第 5 回 p.10）．
+        - 特徴量ベクトルは文字 Bi-gram のブロックと記号のブロックをつなげたもの．字種構成比のブロックは旧案のみ（Slide 10）．
       runs: [記号特徴の設計は 010]
-    num_sources: ["storyline:Slide 6"]
+    num_sources: ["storyline:Slide 9"]
 
-  - id: "7"
+  - id: "10"
     kind: main
     section: 担当 A
     title: 【担当 A】実験の概要
@@ -278,14 +433,14 @@ slides:
       - table:
           header: [構成, 二乗ノルム割合（全チャンクの平均）]
           rows:
-            - ["既定仕様（Bi-gram ＋記号）", "Bi-gram / 記号 = 0.72 / 0.28（L = 100）\nBi-gram / 記号 = 0.57 / 0.43（L = 500）\nBi-gram / 記号 = 0.52 / 0.48（L = 1000）"]
+            - ["既定仕様（Bi-gram ＋記号）", "Bi-gram / 記号 = 0.57 / 0.43（$L = 500$）"]
             - ["旧案（＋字種構成比）", "字種が 0.98～0.99"]
             - ["旧案＋Min-Max", "Bi-gram が 0.88～0.96"]
           widths: [0.4, 0.6]
           size: 14
       - text: "正規化はブロックの重み付けを暗黙に決める操作[^1]"
     right:
-      - text: "比較条件[^1]"
+      - text: "既定と比べる条件[^1]"
       - bullets:
           - "既定（Bi-gram ＋記号，正規化なし）"
           - "Min-Max 正規化"
@@ -298,11 +453,11 @@ slides:
       points:
         - 正規化はブロックの重み付けを暗黙に決める操作のため，単一ブロックに支配されない正規化なしを既定とした．
         - 字種を入れると字種が約 99% を占め，Min-Max をかけると今度は Bi-gram が 88～96% を占める．相対頻度のみの既定仕様だけが単一ブロックに支配されない．
-        - Min-Max は独自設計のアブレーションのみ．
+        - Min-Max は既定と比べる条件のみ（独自設計）．
       runs: [010 の実測（investigate_a_scale.py）]
-    num_sources: ["storyline:Slide 7"]
+    num_sources: ["storyline:Slide 10"]
 
-  - id: "8"
+  - id: "11"
     kind: main
     section: 担当 A
     title: 【担当 A】結果・考察
@@ -312,25 +467,29 @@ slides:
     left:
       - figure: figures/a_ablation.png
         h: 3.9
-      - text: "L = 500，重心法，間引きあり．点線は基準値[^1]"
+      - text: "$L = 500$，重心法，間引きあり．点線は基準値[^1]"
         muted: true
     right:
       - bullets:
           - "作品間分割の作家別 MAP の平均 0.472[^2]"
           - "Min-Max は作品内分割で最高（0.973）．作品間分割では既定より低い"
           - "記号 3 次元だけでも作家別正解率の平均 0.455（基準値 0.25）"
-          - "記号のみの MAP の低下は −0.007 とほぼない"
-          - text: "考察（仮説，今回は分離していない）"
+          - "記号のみは作品が変わっても MAP がほぼ落ちない（−0.007）"
+          - text: "作品間分割でも A が最高になる理由の候補（未検証）"
             sub:
-              - "底本の表記方針や作品ごとの字種を拾っている可能性"
-              - "漢字率：太宰 0.297 / 0.221，花袋 0.348 / 0.289"
-              - "文字 Bi-gram が付属語を含む文字列（「た。」等）を拾っている可能性"
+              - "底本の表記の差（漢字・かな）を文字 Bi-gram を通して拾っている可能性"
         size: 15
+      - text: "同じ作家でも作品ごとに表記が異なる（「大分 / だいぶ」：『坊っちゃん』20 / 0，『三四郎』0 / 40）"
+        muted: true
+        size: 13
+      - text: "文字 Bi-gram はこの漢字・かなの差を拾いうる"
+        muted: true
+        size: 13
     footnotes:
       - 独自設計
       - 第 5 回 p.31 を参考にした独自設計
     notes:
-      time: 75 秒
+      time: 60 秒
       points:
         - A は未知作品でも作家別 MAP の平均が全特徴量で最高（0.472）だが，底本の表記の交絡が残る．
         - 既定：Intra-work 0.584 ± 0.004 / 0.873 ± 0.018，Inter-work 0.472 ± 0.003 / 0.543 ± 0.011（作家別 MAP の平均 / 作家別正解率の平均）．
@@ -338,30 +497,48 @@ slides:
         - Bi-gram のみ：Intra-work 0.581 ± 0.006 / 0.883 ± 0.021，Inter-work 0.422 ± 0.004 / 0.525 ± 0.020．
         - 記号のみ：Intra-work 0.379 ± 0.006 / 0.473 ± 0.031，Inter-work 0.371 ± 0.003 / 0.455 ± 0.010．句読点・文長は作品が変わっても残る手がかり．
         - 基準値：作家別 MAP の平均 0.258（Intra-work），0.260（Inter-work），作家別正解率の平均 0.25．
-        - Bi-gram と記号の結合が Inter-work の MAP で最高．全作品の字種構成比は補助 S13．
+        - Bi-gram と記号の結合が Inter-work の MAP で最高．
+        - 作品間分割でも A が最高になる理由の候補（未検証）：字種のブロックは既定に含まれないが，底本の表記の差（漢字・かな）は文字 Bi-gram を通して効く可能性．作品別の字種構成比と表記揺れは補助 S9．
       runs: [full_006（グラフ A は plot_slide_figures.py で full_006 の summary.csv から描画）]
-    num_sources: ["storyline:Slide 8"]
+    num_refs:
+      - at: "作品間分割の作家別 MAP の平均 0.472"
+        refs: ["summary:A|L500|inter|bal|cosine|centroid|mean:map_macro"]
+      - at: "作品内分割で最高（0.973）"
+        refs: ["summary:A[scaling=minmax]|L500|intra|bal|cosine|centroid|mean:balanced_accuracy"]
+      - at: "作家別正解率の平均 0.455（基準値 0.25）"
+        refs: ["summary:A[blocks=symbol]|L500|inter|bal|cosine|centroid|mean:balanced_accuracy", "summary:A[blocks=symbol]|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"]
+    num_sources: ["storyline:Slide 11", "storyline:S9"]
 
   # ------------------------------------------------------------------ 担当 B
-  - id: "9"
+  - id: "12"
     kind: main
     section: 担当 B
     title: 【担当 B】定義
     claim: 何を書いたかではなく，品詞の並びと付属語の使い方（どう書いたか）で類似度を測る
-    layout: single
-    body:
+    layout: split
+    ratio: 0.56
+    left:
+      - deflist:
+          rows:
+            - ["付属語", "助詞・助動詞[^1]"]
+            - ["内容語", "名詞・動詞・形容詞[^1]"]
+            - ['$t_i$', '$i$ 番目の形態素の品詞．UniDic の大分類と中分類の組（例：名詞-普通名詞，助詞-格助詞）[^2]']
+            - ['$C(t_{i-1}, t_i)$', "品詞 2-gram：隣り合う品詞の組の出現回数[^2]"]
+            - ["語のキー", "表層形（書かれたままの語形．既定）と語彙素[^4]"]
+            - ["ブロック", ["結合：品詞 2-gram ＋語（既定）", "語のみ", "品詞 2-gram のみ"]]
+          widths: [0.25, 0.75]
+          size: 14
       - bullets:
-          - "付属語：助詞・助動詞[^1]"
-          - "内容語：名詞・動詞・形容詞[^1]"
-          - "品詞 2-gram：隣り合う品詞の組の出現 C(t_{i−1}, t_{i})．品詞は階層の上位 2 段[^2]"
           - "値はすべて相対頻度（出現回数 ÷ 総形態素数）[^3]"
-          - "語のキー：表層形（既定）と語彙素[^4]"
-          - text: "ブロック"
-            sub:
-              - "結合：品詞 2-gram ＋語（既定）"
-              - "語のみ"
-              - "品詞 2-gram のみ"
-        size: 20
+          - "比べるベクトル：Test チャンクの品詞 2-gram ＋付属語のベクトルと各作家の重心（同じ空間）のコサイン類似度"
+        size: 13
+    right:
+      - text: "品詞の 4 階層（「ラーメンを食べた。」の解析結果）[^2]"
+        size: 14
+      - diagram: pos4
+        sentence: ラーメンを食べた。
+      - text: "本研究の形態素解析（fugashi・unidic-lite）の出力．太枠が $t_i$ に使う上位 2 段（大分類・中分類）"
+        muted: true
     footnotes:
       - 第 2 回 p.11
       - 第 2 回 p.30，第 2 回 p.36
@@ -371,11 +548,12 @@ slides:
       time: 45 秒
       points:
         - 何を書いたか（内容）ではなく，品詞の並びと付属語の使い方（どう書いたか）で類似度を測る．
-        - 品詞 2-gram は pos1 と pos2 の組の相対頻度（第 2 回 p.30 の C(t[i−1], t[i])），付属語は助詞・助動詞（第 2 回 p.11）の相対頻度．表層形が既定（第 2 回 p.16 の形態素解析の出力）．
+        - 右の図は講義（第 2 回 p.36）の品詞の 4 階層の考え方を，講義と同じ例文を本研究の形態素解析（UniDic）で解析して描き直したもの．t[i] は大分類と中分類の組（例：名詞-普通名詞，助詞-格助詞）．
+        - 品詞 2-gram は pos1 と pos2 の組の相対頻度（第 2 回 p.30 の C(t[i−1], t[i])，t[i] は i 番目の形態素の品詞），付属語は助詞・助動詞（第 2 回 p.11）の相対頻度．表層形が既定（第 2 回 p.16 の形態素解析の出力）．
       runs: []
-    num_sources: ["storyline:Slide 9"]
+    num_sources: ["storyline:Slide 12"]
 
-  - id: "10"
+  - id: "13"
     kind: main
     section: 担当 B
     title: 【担当 B】実験の概要
@@ -383,101 +561,122 @@ slides:
     layout: single
     body:
       - bullets:
-          - "既定：付属語・表層形・結合"
-          - text: "比較条件[^1]"
+          - "既定：付属語・表層形・結合（品詞 2-gram ＋語）"
+          - text: "既定と比べる条件[^1]"
             sub:
               - "語彙素"
               - "接続詞・連体詞・感動詞を加えた拡張"
               - "品詞 2-gram 単独"
               - "語ブロック単独"
-          - text: "二乗ノルム割合：結合版では品詞 2-gram ブロックが 65～95% を占める[^1]"
+          - text: "結合版のコサインは品詞 2-gram ブロックがほぼ決める[^1]"
             sub:
-              - "付属語 0.65"
-              - "内容語対照 0.87～0.95"
-          - "語の種類（付属語か内容語か）の効果は語ブロック単独で比べる（Slide 20）"
-        size: 20
+              - "二乗ノルム割合（ブロックがベクトルの長さに占める割合）で 65～95%"
+              - "付属語 0.65，内容語対照 0.87～0.95"
+          - "そのため語の種類（付属語か内容語か）の効果は語ブロック単独で比べる"
+        size: 16
+      - diagram: b_blocks
     footnotes: [独自設計]
     notes:
       time: 45 秒
       points:
         - B 全体を既定とし，どのブロック・キーが効くかを分けて確かめる．
-        - 語の種類（付属語か内容語か）の効果は語ブロック単独で比べる（Slide 20）．
+        - 結合版では品詞 2-gram ブロックが二乗ノルムの大半を占め，コサインをほぼ決める．語ブロックの差が薄まるため，語の種類（付属語か内容語か）の効果は語ブロック単独で比べる（補助 S11）．
       runs: [二乗ノルム割合は 025]
-    num_sources: ["storyline:Slide 10"]
+    num_sources: ["storyline:Slide 13"]
 
-  - id: "11"
+  - id: "14"
     kind: main
     section: 担当 B
     title: 【担当 B】結果・考察
     claim: B は作品が変わったときの作家別 MAP の平均の低下が全特徴量で最小
     layout: split
-    ratio: 0.55
+    ratio: 0.6
     left:
-      - table:
-          header: [条件, 作家別 MAP の平均, 作家別正解率の平均]
-          rows:
-            - ["既定（付属語・表層形・結合）", "0.420 ± 0.004", "0.581 ± 0.011"]
-            - ["語彙素", "0.415 ± 0.004", "0.573 ± 0.005"]
-            - ["接続詞・連体詞・感動詞を加えた拡張", "0.418 ± 0.004", "0.579 ± 0.011"]
-            - ["品詞 2-gram 単独", "0.406 ± 0.004", "0.564 ± 0.005"]
-            - ["基準値", "0.260", "0.25"]
-          widths: [0.44, 0.28, 0.28]
-          size: 13
-      - text: "作品間分割・L = 500・重心法・間引きあり[^1]"
+      - figure: figures/b_ablation.png
+        h: 3.9
+      - text: "$L = 500$，重心法，間引きあり．点線は基準値[^1]"
         muted: true
     right:
       - bullets:
           - "作品内分割 → 作品間分割の MAP の変化は −0.082 で全特徴量で最小[^2]"
-          - "品詞 2-gram 単独でも結合版に近い"
-          - "主な寄与源は品詞 2-gram（解釈）"
-          - "表層形と語彙素の差は小さい（MAP −0.005）"
-          - "活用形が文末の癖を表すという期待は強くは支持されない"
-        size: 16
+          - text: "品詞 2-gram 単独（0.406）でも結合版（0.420）に近い"
+            sub:
+              - "B の主な手がかりは品詞 2-gram と解釈（この比較からの推測で，寄与は分離していない）"
+          - text: "表層形と語彙素の差は小さい（MAP −0.005）"
+            sub:
+              - "活用形が文末の癖を表すという期待は強くは支持されない"
+        size: 15
     footnotes:
       - 独自設計
       - 第 5 回 p.31 を参考にした独自設計
     notes:
-      time: 75 秒
+      time: 60 秒
       points:
         - B は作品が変わったときの作家別 MAP の平均の低下が全特徴量で最小（−0.082）．
         - 品詞 2-gram 単独（0.406）でも付属語の結合版（0.420）に近く，B の主な寄与源は品詞 2-gram（解釈）．
         - 表層形と語彙素の差は小さく（MAP −0.005），活用形が文末の癖を表すという期待は強くは支持されない．拡張条件も既定とほぼ同じ．
-      runs: [full_006]
-    num_sources: ["storyline:Slide 11", "storyline#主結果表 3"]
+        - 作品間分割の値（作家別 MAP の平均 / 作家別正解率の平均）：既定 0.420 ± 0.004 / 0.581 ± 0.011，語彙素 0.415 ± 0.004 / 0.573 ± 0.005，拡張 0.418 ± 0.004 / 0.579 ± 0.011，品詞 2-gram 単独 0.406 ± 0.004 / 0.564 ± 0.005（基準値 0.260 / 0.25）．作品内分割の値は storyline の Slide 14．
+      runs: [full_006（グラフ B-1 は plot_slide_figures.py で full_006 の summary.csv から描画）]
+    num_refs:
+      - at: "MAP の変化は −0.082"
+        refs: ["summary:B|L500|inter|bal|cosine|centroid|mean:map_macro - summary:B|L500|intra|bal|cosine|centroid|mean:map_macro"]
+      - at: "品詞 2-gram 単独（0.406）でも結合版（0.420）"
+        refs: [null, "summary:B[blocks=pos_bigram]|L500|inter|bal|cosine|centroid|mean:map_macro", "summary:B|L500|inter|bal|cosine|centroid|mean:map_macro"]
+      - at: "MAP −0.005"
+        refs: ["summary:B[token_key=lemma]|L500|inter|bal|cosine|centroid|mean:map_macro - summary:B|L500|inter|bal|cosine|centroid|mean:map_macro"]
+    num_sources: ["storyline:Slide 14", "storyline#主結果表 3"]
 
   # ------------------------------------------------------------------ 担当 C
-  - id: "12"
+  - id: "15"
     kind: main
     section: 担当 C
     title: 【担当 C】定義
     claim: 講義の情報検索の枠組みをそのまま著者識別に適用したベースライン
-    layout: single
-    body:
+    layout: split
+    ratio: 0.56
+    left:
+      - deflist:
+          rows:
+            - ['$\text{tf}(t, d)$', '$n_{dt} / |d|$：チャンク $d$ での語 $t$ の出現回数 ÷ 総形態素数[^1]']
+            - ['$\text{df}(t)$', "語 $t$ が出現する Train チャンク数"]
+            - ["$N$", "Train チャンク総数"]
+            - ['$\text{idf}(t)$', '$\log \frac{N}{\text{df}(t)}$[^2]']
+            - ["索引語", "名詞・動詞・形容詞（語彙素で集計）[^3]"]
+            - ["$M$", "Train で決めた索引語の語彙数（ベクトルの次元数）"]
+          widths: [0.24, 0.76]
+          size: 14
       - bullets:
-          - "tf(t, d)：チャンク d における語 t の出現回数 ÷ 総形態素数[^1]"
-          - "df(t)：語 t が出現する Train チャンク数．N：Train チャンク総数"
-          - "idf(t) = log(N / df(t))[^2]"
-          - "重み：w_{dt} = tf(t, d) · idf(t)[^4]"
-          - "索引語：名詞・動詞・形容詞（語彙素で集計）[^3]"
-          - text: "df(t) = N の語は idf = 0 で重みが消える[^3]"
+          - text: '$\text{df}(t) = N$ の語は $\text{idf} = 0$ で重みが消える[^3]'
             sub:
               - "どの文書にも均質に現れる語は不要語，という定義と整合"
-              - "実データでは L = 100, 500 で 0 語，L = 1000 で 1 語のみ"
-        size: 20
+              - "実データ（$L = 500$）では該当 0 語"
+          - "比べるベクトル：Test チャンクの TF-IDF ベクトル（$M$ 次元）と各作家の重心（同じ空間）"
+        size: 13
+    right:
+      - text: "重み（TF-IDF）[^4]"
+      - text: '$w_{dt} = \frac{n_{dt}}{|d|} \log \frac{N}{\text{df}(t)}$'
+        size: 18
+      - text: "コサイン類似度に代入[^5]"
+      - text: '$\cos(\vec{d}, \vec{q}) = \frac{\sum_{t} w_{dt} \, w_{qt}}{\sqrt{\sum_{t} w_{dt}^2} \sqrt{\sum_{t} w_{qt}^2}}$'
+        size: 18
+      - text: "$t$ は索引語の全体（Train で決めた語彙）を動く"
+        muted: true
     footnotes:
       - 第 5 回 p.12
       - 第 5 回 p.13
       - 第 5 回 p.11
       - 第 5 回 p.25
+      - 第 5 回 p.26
     notes:
       time: 45 秒
       points:
         - 講義の情報検索の枠組み（第 5 回 p.25 のベクトル空間モデル）をそのまま著者識別に適用したベースライン．
-        - idf = 0 の語は L = 100, 500 で 0 語，L = 1000 で 1 語（為る）のみ．全 10 分割の間引きなしの Train で数えた値（verify_word_tfidf.py）．
+        - 重みは tf（出現回数 ÷ 総形態素数，第 5 回 p.12）と idf（第 5 回 p.13）の積．これを第 5 回 p.26 のコサイン係数に代入して類似度を求める．
+        - idf = 0 の語は L = 500 で 0 語．全 10 分割の間引きなしの Train で数えた値（verify_word_tfidf.py）．
       runs: [verify_word_tfidf.py]
-    num_sources: ["storyline:Slide 12"]
+    num_sources: ["storyline:Slide 15"]
 
-  - id: "13"
+  - id: "16"
     kind: main
     section: 担当 C
     title: 【担当 C】実験の概要
@@ -508,11 +707,6 @@ slides:
           - text: "副詞（大分 / だいぶ）は C の索引語の対象外"
             sub:
               - "その表記差が効くのは文字表層を見る A のみ"
-          - text: "条件"
-            sub:
-              - "作品内分割・作品間分割"
-              - "L ∈ {100, 500, 1000}"
-              - "重心法，間引きあり・なし"
         size: 16
     footnotes:
       - 独自設計
@@ -525,62 +719,79 @@ slides:
         - 底本の表記差は内容語にも及ぶ（表 C-1）が，C は語彙素で吸収するため，同一著者の別作品で「云う」と「言う」が別次元になる交絡は生じない．
         - 副詞「大分 / だいぶ」「矢張り / やはり」は語彙素では統一されるものの C の索引語（名詞・動詞・形容詞）の対象外で，その表記差が効くのは文字表層を見る A のみ．
       runs: [verify_word_tfidf.py（表 C-1），語彙素による表記統一は 004 の実測]
-    num_sources: ["storyline:Slide 13"]
+    num_sources: ["storyline:Slide 16"]
 
-  - id: "14"
+  - id: "17"
     kind: main
     section: 担当 C
     title: 【担当 C】結果・考察
     claim: 同じ作品内の語彙（登場人物名・題材）の一致は，同じ著者の別作品には持ち越されない
     layout: split
-    ratio: 0.62
+    ratio: 0.6
     left:
       - figure: figures/c_intra_inter.png
-        h: 3.0
-      - table:
-          header: ["L = 500", 作家別 MAP の平均, 作家別正解率の平均, ΔS（マクロ）]
-          rows:
-            - [作品内分割, "0.507 ± 0.005", "0.966 ± 0.010", "0.0310"]
-            - [作品間分割, "0.306 ± 0.001", "0.342 ± 0.014", "0.0053"]
-          widths: [0.22, 0.26, 0.28, 0.24]
-          size: 12
+        h: 3.9
+      - text: "$L = 500$，重心法，間引きあり．点線は基準値[^1]"
+        muted: true
     right:
       - bullets:
           - "作品内分割：作家別正解率の平均 0.966 と全特徴量で最高"
           - "作品間分割：0.342（基準値 0.25）に低下"
-          - "ΔS（マクロ）も 0.0310 から 0.0053 に縮小[^1]"
           - "MAP の低下（−0.202）は A・B より大きい[^2]"
-          - "語の種類の効果は Slide 20 の統制比較で示す"
+          - "登場人物名・題材の語は作品ごとに変わり，別作品の手がかりにならない"
         size: 16
     footnotes:
       - 独自設計
       - 第 5 回 p.31 を参考にした独自設計
     notes:
-      time: 75 秒
+      time: 60 秒
       points:
         - 同じ作品内の語彙（登場人物名・題材）の一致は，同じ著者の別作品には持ち越されない．
-        - C と B の差は語の種類に加えて重み付けとキーの違いを含むため，語の種類の効果は Slide 20 の統制比較で示す．
-        - 漱石への予測の集中と間引きの効果は補助 S11．
-        - Inter-work の値：L = 100 で MAP 0.268 ± 0.001（基準値 0.253），L = 1000 で 0.341 ± 0.003（基準値 0.267）．同点・ゼロベクトルの照会は全条件で 0 件．
+        - 値（作家別 MAP の平均 / 作家別正解率の平均）：作品内分割 0.507 ± 0.005 / 0.966 ± 0.010，作品間分割 0.306 ± 0.001 / 0.342 ± 0.014（基準値 0.258・0.260 / 0.25）．
+        - 漱石への予測の集中と間引きの効果は補助 S8．同点・ゼロベクトルの照会は全条件で 0 件．
       runs: [full_006（グラフ C は plot_slide_figures.py で full_006 の summary.csv から描画）]
-    num_sources: ["storyline:Slide 14"]
+    num_refs:
+      - at: "作家別正解率の平均 0.966"
+        refs: ["summary:C|L500|intra|bal|cosine|centroid|mean:balanced_accuracy"]
+      - at: "0.342（基準値 0.25）"
+        refs: ["summary:C|L500|inter|bal|cosine|centroid|mean:balanced_accuracy", "summary:C|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"]
+      - at: "MAP の低下（−0.202）"
+        refs: ["summary:C|L500|inter|bal|cosine|centroid|mean:map_macro - summary:C|L500|intra|bal|cosine|centroid|mean:map_macro"]
+    num_sources: ["storyline:Slide 17"]
 
   # ------------------------------------------------------------------ 担当 D
-  - id: "15"
+  - id: "18"
     kind: main
     section: 担当 D
     title: 【担当 D】定義
-    claim: 一緒に使われやすい単語グループ（共起構造）を K 次元に圧縮して類似度を測る
-    layout: single
-    body:
+    claim: 一緒に使われやすい単語グループ（共起構造）を $K$ 次元に圧縮して類似度を測る
+    layout: split
+    ratio: 0.55
+    left:
+      - deflist:
+          rows:
+            - ["特異値分解", '$X = U \Sigma V^\top$（$X$：Train の TF-IDF 行列）[^1]']
+            - ["次元削減", '上位 $K$ 成分 $U_K, \Sigma_K, V_K$ だけを残す[^1]']
+            - ["射影", '$Z = X V_K \Sigma_K^{-1}$（Train チャンク）[^2]']
+            - ["照会の射影", '$\hat{\vec{q}} = \Sigma_K^{-1} V_K^\top \vec{q}$（Test チャンク）[^2]']
+            - ["導出", '$X = U \Sigma V^\top$ から $U_K$ を求める式を導き，照会にも同じ変換を適用[^2]']
+            - ["累積寄与率", "上位 $K$ 個の特異値の二乗和 ÷ 全体"]
+          widths: [0.26, 0.74]
+          size: 14
       - bullets:
-          - "特異値分解：X = U Σ V^{⊤}（X は Train の TF-IDF 行列）[^1]"
-          - "上位 K 成分 U_{K}，Σ_{K}，V_{K} だけを残して次元削減[^1]"
-          - "射影：Z = X V_{K} Σ_{K}^{−1}．照会ベクトル q は Σ_{K}^{−1} V_{K}^{⊤} q に変換[^2]"
-          - "導出：X = U Σ V^{⊤} から U_{K} = X V_{K} Σ_{K}^{−1}[^2]"
-          - "累積寄与率：上位 K 個の特異値の二乗和 ÷ 全体"
-          - "出力は負値を含む密ベクトル（類似度の範囲は [−1, 1]）"
-        size: 20
+          - "比べるベクトル：TF-IDF ベクトルを $K = 32$ 次元の LSI 空間に射影したベクトルと各作家の重心（同じ空間）"
+          - text: "射影したベクトルは負の成分を含み，類似度は $[-1, 1]$ の値をとる"
+            sub:
+              - "負の類似度：潜在的な話題の重みが逆向き"
+              - "重心法は類似度の順位のみを使うため判定に影響しない"
+        size: 14
+    right:
+      - diagram: svd
+        h: 2.3
+      - text: "$N$：Train チャンク数，$M$：語彙の次元数，$K$：残す次元数（長方形の比は模式）"
+        muted: true
+      - text: '$U_K = X V_K \Sigma_K^{-1}$[^2]'
+        size: 18
     footnotes:
       - 第 5 回 p.36-37
       - 第 5 回 p.37 からの導出（独自設計）
@@ -588,32 +799,38 @@ slides:
       time: 45 秒
       points:
         - 表面上は違う単語を使っていても，一緒に使われやすい単語グループ（共起構造）を K 次元に圧縮して類似度を測る．
-        - 第 5 回 p.37 の「検索質問を V によりトピックの重みベクトルに変換し，U を用いて文書と比較する」の式としての実現．
+        - 第 5 回 p.37 の「検索質問を V によりトピックの重みベクトルに変換し，U を用いて文書と比較する」の式としての実現．X = U Σ V の転置 の両辺に右から V_K と Σ_K の逆行列を掛けると U_K = X V_K Σ_K の逆行列（右下の式）．照会ベクトルにも同じ変換を適用．
+        - 模式図は X（N × M）を U_K（N × K），Σ_K（K × K），V_K の転置（K × M）の積で近似することを示す．
         - LSI は第 3 回の分散表現（ニューラル手法）とは別物であり，「分散表現」とは呼ばない．
+        - 射影したベクトルは負の成分を含むため，コサイン類似度が負になりうる（潜在的な話題の重みが逆向き）．重心法は類似度が最大の作家を選ぶだけで，値の符号や範囲は判定に影響しない．
       runs: [slides_d.md]
-    num_sources: ["storyline:Slide 15", "slides_d"]
+    num_sources: ["storyline:Slide 18", "slides_d"]
 
-  - id: "16"
+  - id: "19"
     kind: main
     section: 担当 D
     title: 【担当 D】実験の概要
-    claim: 潜在次元数 K を変えても結論が変わらないかを確かめる
+    claim: 潜在次元数 $K$ を変えても結論が変わらないかを確かめる
     layout: single
     body:
       - table:
-          header: [K, "8", "16", "32（既定）", "64"]
+          header: ["$K$", "8", "16", "32（既定）", "64"]
           rows:
             - [累積寄与率, "0.120", "0.172", "0.248", "0.365"]
           widths: [0.24, 0.19, 0.19, 0.19, 0.19]
           size: 18
       - text: "累積寄与率は作品内分割の間引きあり Train での値[^2]"
         muted: true
+      - deflist:
+          rows:
+            - ["$K$", "LSI で残す潜在次元の数[^1]"]
+            - ["比べる $K$", '$K \in \{8, 16, 32, 64\}$（既定 32）[^2]']
+            - ["既定と比べる条件", '$Z = X V_K$（$\Sigma_K^{-1}$ を掛けない射影）[^2]']
+          widths: [0.24, 0.76]
+          size: 20
       - bullets:
-          - "K：LSI で残す潜在次元の数[^1]"
-          - "K ∈ {8, 16, 32, 64}（既定 32）[^2]"
-          - "比較条件：Σ_{K}^{−1} を掛けない射影 Z = X V_{K}[^2]"
-          - "K の比較は作家別正解率の平均と作家別 MAP の平均で行う"
-        size: 20
+          - "$K$ の比較は作家別正解率の平均と作家別 MAP の平均で行う"
+        size: 18
     footnotes:
       - 第 5 回 p.37
       - 独自設計
@@ -621,44 +838,42 @@ slides:
       time: 45 秒
       points:
         - 潜在次元数 K を変えても結論が変わらないかを確かめる．
-        - ΔS は K の比較に使わない（K を変えるとコサイン類似度の値の分布が変わるため）．
       runs: [slides_d.md（full_006 と一致），累積寄与率は verify_qa_points の Q9]
-    num_sources: ["storyline:Slide 16", "slides_d"]
+    num_sources: ["storyline:Slide 19", "slides_d"]
 
-  - id: "17"
+  - id: "20"
     kind: main
     section: 担当 D
     title: 【担当 D】結果・考察
-    claim: 内容語を圧縮しても題材への依存は残る（事前の仮説どおり）
+    claim: 内容語を圧縮しても題材への依存は残る（作品間分割で基準値近くまで低下）
     layout: single
     body:
       - figure: figures/d_k_sweep.png
-        h: 2.7
-      - columns:
-          ratio: 0.62
-          left:
-            - bullets:
-                - "作品内分割 0.957 → 作品間分割 0.296（基準値 0.25）[^1]"
-                - "作品間分割で C（0.342）より良くならない"
-                - "どの K でも作品間分割は 0.26～0.32[^1]"
-              size: 16
-          right:
-            - figure: figures/d_heatmap_L500_inter_bal.png
-              h: 2.0
+        h: 2.9
+      - bullets:
+          - "作品内分割 0.957 → 作品間分割 0.296（基準値 0.25）[^1]"
+          - "作品間分割で C（0.342）より良くならない"
+          - "どの $K$ でも作品間分割は 0.26～0.32[^1]"
+        size: 16
     footnotes:
       - 独自設計
     notes:
-      time: 75 秒
+      time: 60 秒
       points:
-        - 内容語を圧縮しても題材への依存は残る（事前の仮説どおり）．
+        - 内容語を圧縮しても題材への依存は残る（作品間分割で基準値近くまで低下）．
         - Intra-work では作家別正解率の平均 0.957 だが Inter-work では 0.296 で，C（0.342）より良くならない．どの K でも Inter-work は 0.26～0.32．
         - グラフ D の Inter-work の作家別正解率の平均：0.258 / 0.286 / 0.296 / 0.319，作家別 MAP の平均：0.322 / 0.311 / 0.292 / 0.284（K = 8 / 16 / 32 / 64，基準値 0.25，0.260）．
-        - ヒートマップは作品間分割，L = 500，間引きありの 4×4 作家間平均類似度．
+        - 4 特徴量の作家間平均類似度のヒートマップは補助 S16．
       runs: [full_006，d_k_sweep.png は plot_d_k_sweep.py]
-    num_sources: ["storyline:Slide 17", "slides_d"]
+    num_refs:
+      - at: "作品内分割 0.957 → 作品間分割 0.296（基準値 0.25）"
+        refs: ["summary:D|L500|intra|bal|cosine|centroid|mean:balanced_accuracy", "summary:D|L500|inter|bal|cosine|centroid|mean:balanced_accuracy", "summary:D|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"]
+      - at: "C（0.342）"
+        refs: ["summary:C|L500|inter|bal|cosine|centroid|mean:balanced_accuracy"]
+    num_sources: ["storyline:Slide 20", "slides_d"]
 
   # ------------------------------------------------------------------ 統合比較と結論
-  - id: "18"
+  - id: "21"
     kind: main
     section: 統合比較
     title: 全体比較：どの観点で未知作品の著者を識別できるか
@@ -676,36 +891,41 @@ slides:
             - [基準値, "0.260", "0.25", "－"]
           widths: [0.16, 0.3, 0.3, 0.24]
           size: 14
-      - text: "作品間分割・L = 500・重心法・間引きあり．MAP の変化は作品内分割から作品間分割への変化[^1][^2]"
+          refs:
+            vars: [A, B, C, D, null]
+            cols: [null, "summary:{v}|L500|inter|bal|cosine|centroid|mean:map_macro", "summary:{v}|L500|inter|bal|cosine|centroid|mean:balanced_accuracy",
+                   "summary:{v}|L500|inter|bal|cosine|centroid|mean:map_macro - summary:{v}|L500|intra|bal|cosine|centroid|mean:map_macro"]
+            cells:
+              "4,1": "summary:A|L500|inter|bal|cosine|centroid|mean:map_macro_random"
+              "4,2": "summary:A|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"
+      - text: "作品間分割・$L = 500$・重心法・間引きあり．MAP の変化は作品内分割から作品間分割への変化[^1][^2]"
         muted: true
     right:
       - bullets:
-          - text: "事前の仮説"
+          - text: "Slide 2 の仮説と整合"
             sub:
-              - "作品間分割では内容語は本人ペアと他人ペアの類似度分布が重なる"
-              - "付属語と文字表層では本人ペアの類似度が高く保たれる"
-          - text: "仮説と異なった点"
-            sub:
-              - "作家別 MAP の平均の最高は B ではなく A"
-              - "B の内容語対照（0.393）と付属語（0.420）の差は小さい"
+              - "A・B：作品が変わっても基準値を大きく上回る"
+              - "C・D：作品が変わると基準値近くまで落ちる"
+          - "作家別 MAP の平均の最高は A，作品が変わって最も落ちにくいのは B"
+          - "A には底本の表記の交絡の可能性（Slide 11）"
         size: 16
     footnotes:
       - 独自設計
       - 第 5 回 p.31 を参考にした独自設計
     notes:
-      time: 90 秒
+      time: 75 秒
       points:
-        - 内容によらない A・B は未知作品でも基準値を大きく上回り，内容語系の C・D は作品が変わると大きく落ちる（仮説と整合）．
+        - 内容によらない A・B は未知作品でも基準値を大きく上回り，内容語系の C・D は作品が変わると大きく落ちる（Slide 2 の仮説と整合）．
         - 作家別 MAP の平均（Inter-work）は A 0.472 > B 0.420 > C 0.306 > D 0.292（基準値 0.260）．Intra-work → Inter-work の低下は B が最小（−0.082），A −0.112，C −0.202，D −0.241．
-        - A が最高なのは底本の表記の交絡の可能性（Slide 8，補助 S13）．B の内容語対照との差が小さいのは品詞 2-gram ブロックが共通のため．
-        - 「B が最良」とは言わない．類似度の分布図・作家間ヒートマップは補助 S8．
+        - A が最高なのは底本の表記の交絡の可能性（Slide 11，補助 S9）．
+        - 「B が最良」とは言わない．類似度の分布図・作家間ヒートマップは補助 S16．
       runs: [full_006（メイン結果表 4）]
-    num_sources: ["storyline:Slide 18", "storyline#メイン結果表 4"]
+    num_sources: ["storyline:Slide 21", "storyline#メイン結果表 4"]
 
-  - id: "19"
+  - id: "22"
     kind: main
     section: 統合比較
-    title: なぜか①：作品内分割と作品間分割の差（トピック漏洩）
+    title: 理由の考察：作品内分割と作品間分割の差（トピック漏洩）
     claim: 作品内分割での C・D の高さは，同じ作品の題材・登場人物の一致（トピック漏洩）によるもの
     layout: split
     ratio: 0.5
@@ -720,73 +940,33 @@ slides:
             - [基準値, "0.25", "0.25"]
           widths: [0.3, 0.35, 0.35]
           size: 16
-      - text: "作家別正解率の平均（作品間分割・L = 500・重心法・間引きあり）[^1]"
+          refs:
+            vars: [A, B, C, D, null]
+            cols: [null, "summary:{v}|L500|intra|bal|cosine|centroid|mean:balanced_accuracy", "summary:{v}|L500|inter|bal|cosine|centroid|mean:balanced_accuracy"]
+            cells:
+              "4,1": "summary:A|L500|intra|bal|cosine|centroid|mean:balanced_accuracy_random"
+              "4,2": "summary:A|L500|inter|bal|cosine|centroid|mean:balanced_accuracy_random"
+      - text: "作家別正解率の平均（$L = 500$・重心法・間引きあり）[^1]"
         muted: true
     right:
       - bullets:
           - "C・D は作品内分割で 0.96 前後に達する"
           - "作品が変わると基準値に近づく"
           - "内容語の手がかりは別作品に持ち越されない"
-          - "C の ΔS（マクロ）：0.0310 → 0.0053"
           - "A・B の低下はより小さく，作品が変わっても残る手がかりを含む"
         size: 18
     footnotes:
       - 独自設計，第 6 回 p.42
     notes:
-      time: 75 秒
+      time: 60 秒
       points:
         - 作品内分割での C・D の高さは，同じ作品の題材・登場人物の一致（トピック漏洩）によるもの．
         - 同じ作品のチャンクが Train と Test に分かれると作品の一致で識別でき，内容語系の C・D は作品内分割で 0.96 前後に達する．作品が変わると基準値に近づき，内容語の手がかりは別作品に持ち越されない．
         - A・B の低下はより小さく，作品が変わっても残る手がかりを含む．
       runs: [full_006（メイン結果表 4）]
-    num_sources: ["storyline:Slide 19", "storyline#メイン結果表 4"]
+    num_sources: ["storyline:Slide 22", "storyline#メイン結果表 4"]
 
-  - id: "20"
-    kind: main
-    section: 統合比較
-    title: なぜか②：付属語と内容語の統制比較
-    claim: 同じ表現のまま語の種類だけを替えると，作品内分割では内容語，作品間分割では付属語が判別で上回る
-    layout: split
-    ratio: 0.5
-    left:
-      - figure: figures/core_chunk_length.png
-        h: 2.85
-      - table:
-          header: [分割, L, MAP の差, 作家別正解率の平均の差]
-          rows:
-            - [作品間分割, "100", "+0.014", "+0.092"]
-            - [作品間分割, "500", "+0.033", "+0.186"]
-            - [作品間分割, "1000", "+0.049", "+0.219"]
-            - [作品内分割, "500", "−0.070", "−0.217"]
-          widths: [0.28, 0.14, 0.24, 0.34]
-          size: 12
-    right:
-      - bullets:
-          - "講義では助詞・助動詞を不要語として索引語から捨てる[^1]"
-          - "比較：B の語ブロック単独で，付属語と内容語を入れ替える[^2]"
-          - "作品間分割の判別：付属語が全 L で +0.09～+0.22 上回る"
-          - "作品内分割の判別：内容語が上（−0.20 前後）．トピック漏洩と整合"
-          - "MAP の差は小さい（+0.014～+0.049）"
-          - "1 作家にしか出ない語を内容語から除くと MAP の差は +0.006（L = 500）"
-        size: 15
-      - text: "差は付属語 − 内容語，重心法，間引きあり．同一著者の文章を上位に並べる力（MAP）ではほぼ同等[^3]"
-        muted: true
-    footnotes:
-      - 第 5 回 p.11，第 5 回 p.14-16
-      - 第 2 回 p.11，独自設計
-      - 独自設計
-    notes:
-      time: 75 秒
-      points:
-        - 同じ表現のまま語の種類だけを替えると，作品内分割では内容語，作品間分割では付属語が判別で上回る．同一著者の文章を上位に並べる力ではほぼ同等．
-        - 結果 1（作家別正解率の平均）：未知作品（Inter-work）では付属語が全 L・間引きの有無によらず +0.09～+0.22 上回る．同じ作品内（Intra-work）では内容語が上（−0.20 前後）で，内容語の強さはトピック漏洩によるものと整合．
-        - 結果 2（作家別 MAP の平均）：Inter-work（間引きあり）で付属語が上回るが差は小さい（+0.014～+0.049）．間引きなしでは +0.004～+0.008．Train で 1 作家にしか出ない語を内容語から除くと +0.006（L = 500），+0.003（L = 1000）とほぼ消える．同じ操作で作家別正解率の平均の差も +0.186 → +0.085（L = 500）に縮むが，付属語が上のまま．
-        - 結合版で差が小さい理由：品詞 2-gram ブロックが二乗ノルムの 65～95% を占め（025），語ブロックの差が薄まるため．
-        - 寺田寅彦の例外は補助 S2，付属語の具体例は補助 S3，講義の頻度上位語は補助 S4．図 B は青：付属語，赤：内容語，実線：語ブロック，点線：結合．
-      runs: [full_006（主結果表 3），sensitivity_029_L100，sensitivity_029_L500，sensitivity_029_L1000]
-    num_sources: ["storyline:Slide 20", "storyline#主結果表 3", "storyline#語彙選択に対する感度"]
-
-  - id: "21"
+  - id: "23"
     kind: main
     section: 結論
     title: 結論と限界
@@ -796,268 +976,126 @@ slides:
     left:
       - box: "C・D は作品内の題材の一致に頼るため，作品が変わると基準値近くまで落ちる"
       - bullets:
-          - text: "統制比較：判別では付属語が内容語を上回る[^1]"
+          - text: "作品間分割の作家別 MAP の平均（基準値 0.260）[^1]"
             sub:
-              - "L = 500, 1000 で +0.085～+0.227"
-              - "L = 100 で +0.038～+0.103"
-          - text: "並べる力（MAP）では作品固有の語を除いた内容語とほぼ同等"
-            sub:
-              - "差は +0.003～+0.006"
-          - "情報検索では捨てる語が，著者識別では手がかりになる：判別では支持"
+              - "A 0.472，B 0.420"
+              - "C 0.306，D 0.292"
+          - "C・D の作品内分割での高さはトピック漏洩（Slide 22）"
+          - "Slide 2 の仮説と整合"
         size: 16
     right:
       - bullets:
-          - "チャンク長：長いほど A・B の MAP は上がる（補助 S6）"
-          - "推論方式：重心法が Train の作家構成によらず安定（補助 S5）"
           - text: "限界"
             sub:
-              - "寺田寅彦の 2 作品は付属語と内容語の大小が逆（補助 S2）"
-              - "4 作家・9 作品で検定はしない"
-              - "A には底本の表記の交絡の可能性が残る"
-              - "漱石への偏り：作品除外で ±0.05 程度動く（補助 S9）"
+              - "4 作家・9 作品のみで，検定はしない"
+              - "A には底本の表記の交絡の可能性（Slide 11）"
+              - "作品間分割では Test の作家だけ Train に 1 作品分しかない"
+              - "その作品の多様性の差は間引きでも消えない"
         size: 16
     footnotes:
       - 独自設計
     notes:
-      time: 60 秒
+      time: 45 秒
       points:
         - 結論：未知作品の著者を識別できるのは内容に依存しない A・B．C・D は作品内の題材の一致に頼るため，作品が変わると基準値近くまで落ちる．
-        - 統制比較：未知作品の判別では，内容語の語彙選択を変えても付属語が内容語を上回る（作家別正解率の平均の差は L = 500, 1000 で +0.085～+0.227，L = 100 で +0.038～+0.103）．同一著者の文章を上位に並べる力（作家別 MAP の平均）では差は小さく，作品固有の語を除いた内容語とはほぼ同等（+0.003～+0.006）．
-        - 旧 Core Message「情報検索では捨てる語が，著者識別では手がかりになる」は，判別（作家別正解率の平均）では支持される．並べる力（MAP）では内容語と同等で，付属語だけが優れた手がかりとまでは言えない．
-        - チャンク長は L = 1000 が最高．
-      runs: [full_006，sensitivity_029_L100，sensitivity_029_L500，sensitivity_029_L1000，exclusion_summary_ABCD]
-    num_sources: ["storyline:Slide 21"]
+        - 作品間分割の作家別 MAP の平均は A 0.472，B 0.420，C 0.306，D 0.292（基準値 0.260）．作品内分割での C・D の高さはトピック漏洩による（Slide 22）．
+        - 限界：4 作家・9 作品のみで検定はしない．A の高さには底本の表記の交絡の可能性が残る．作品間分割では Test の作家だけが Train に 1 作品分しか持たず，作品の多様性の差は間引きでも消えない（残りの偏りとして効く可能性）．Test の作家構成の偏り（漱石が約半数）は作家別の値の単純平均で対処済みのため限界に挙げない（044）．
+        - 付属語と内容語の統制比較，チャンク長，推論方式の比較は質疑用の補助スライド（S11，S7，S2）．
+      runs: [full_006（メイン結果表 4）]
+    num_refs:
+      - at: "A 0.472，B 0.420"
+        refs: ["summary:A|L500|inter|bal|cosine|centroid|mean:map_macro", "summary:B|L500|inter|bal|cosine|centroid|mean:map_macro"]
+      - at: "C 0.306，D 0.292"
+        refs: ["summary:C|L500|inter|bal|cosine|centroid|mean:map_macro", "summary:D|L500|inter|bal|cosine|centroid|mean:map_macro"]
+    num_sources: ["storyline:Slide 23", "storyline#メイン結果表 4"]
 
-  # ------------------------------------------------------------------ 出典一覧
-  - id: "出典"
-    kind: sources
-    section: 出典一覧
-    title: 出典一覧
-    claim: 出典は講義資料の回・頁と独自設計のみ（外部文献は引用しない）
-    layout: split
-    ratio: 0.68
-    left:
-      - text: "講義資料（自然言語処理システム）"
-      - columns:
-          ratio: 0.5
-          left:
-            - bullets:
-                - "第 2 回 p.8：文の定義"
-                - "第 2 回 p.11：品詞分類"
-                - "第 2 回 p.16：形態素解析の出力"
-                - "第 2 回 p.25：N-gram"
-                - "第 2 回 p.28-30：品詞 2-gram"
-                - "第 2 回 p.36：品詞の階層"
-                - "第 2 回 p.37：UniDic"
-                - "第 2 回 p.45：Jaccard 係数"
-                - "第 2 回 p.48：代表文書との類似度による分類"
-                - "第 3 回 p.25：コサイン類似度"
-                - "第 3 回 p.33：単語重なり率"
-                - "第 5 回 p.10：文書の内部表現"
-              size: 12
-          right:
-            - bullets:
-                - "第 5 回 p.11：索引語と不要語"
-                - "第 5 回 p.12：tf"
-                - "第 5 回 p.13：idf"
-                - "第 5 回 p.14-16：頻度順位と tf・idf 順位"
-                - "第 5 回 p.25：ベクトル空間モデル"
-                - "第 5 回 p.26：コサイン係数"
-                - "第 5 回 p.28-29：再現率・適合率・F 値"
-                - "第 5 回 p.31：MRR・MAP"
-                - "第 5 回 p.36-37：LSI と特異値分解"
-                - "第 6 回 p.42：学習用データとテストデータの分割例"
-                - "第 6 回 p.44：正解率"
-                - "構想発表資料 p.4：コサイン類似度による比較の構想"
-              size: 12
-    right:
-      - text: "独自設計（出典なし）"
-      - bullets:
-          - "類似度ギャップ ΔS と 4×4 作家間行列"
-          - "作家別上位 k 平均"
-          - "全体上位 k の重み付き投票"
-          - "作家別の値の単純平均"
-          - "AP の分母（適合文書数）とランダム基準"
-          - "LSI の射影式（第 5 回 p.37 の分解から導出）"
-          - "A の記号特徴と Min-Max 正規化"
-          - "Train チャンク数の間引き"
-          - "語彙選択に対する感度分析"
-        size: 12
-    footnotes: []
-    notes:
-      time: 0 秒（表示のみ，読み上げない）
-      points:
-        - 各スライドの脚注 [1] 等の出典をまとめたもの．
-      runs: []
-    num_sources: ["storyline#出典一覧の掲載内容"]
-
-  # ------------------------------------------------------------------ 補助スライド（質疑用）
-  - id: "S1"
-    kind: supp
-    section: 補助
-    title: S1：語彙選択に対する感度
-    question: "追加質問「MAP の差が小さいのに付属語が有効と言えるのか」，Q13"
-    claim: 作家別正解率の平均の差は語彙選択を変えても付属語が上
+  - id: "24"
+    kind: main
+    role: references
+    section: 参考文献
+    title: 参考文献
     layout: single
     body:
       - table:
-          header: [条件, 語彙選択, 検索対象・重心, "MAP の差\nL = 100 / 500 / 1000", "作家別正解率の平均の差\nL = 100 / 500 / 1000"]
+          header: [資料, 使用した頁]
           rows:
-            - ["主結果（間引きあり）", 間引き後の Train, 間引き後の Train, "+0.014 / +0.033 / +0.049", "+0.092 / +0.186 / +0.219"]
-            - ["間引きなし", Train 全件, Train 全件, "+0.004 / +0.004 / +0.008", "+0.097 / +0.196 / +0.215"]
-            - ["語彙選択のみ全件", Train 全件, 間引き後の Train, "+0.001 / +0.006 / +0.015", "+0.090 / +0.178 / +0.211"]
-            - ["検索対象のみ全件", 間引き後の Train, Train 全件, "+0.011 / +0.029 / +0.047", "+0.103 / +0.208 / +0.227"]
-            - ["1 作家のみの語を除外", "間引き後の Train\n（1 作家にしか出ない語を除く）", 間引き後の Train, "+0.005 / +0.006 / +0.003", "+0.038 / +0.085 / +0.104"]
-          widths: [0.18, 0.21, 0.15, 0.23, 0.23]
-          size: 12
-      - text: "作品間分割，語ブロック単独，付属語 − 内容語．間引きなし以外は 5 シードの平均[^1]"
+            - ["自然言語処理システム特論 講義資料 第 2 回", "p.8 / p.11 / p.16 / p.25 / p.30\np.36 / p.37 / p.45 / p.48"]
+            - ["自然言語処理システム特論 講義資料 第 3 回", "p.25 / p.33"]
+            - ["自然言語処理システム特論 講義資料 第 5 回", "p.10～16 / p.25 / p.26 / p.28-29 / p.31 / p.36-37"]
+            - ["自然言語処理システム特論 講義資料 第 6 回", "p.42 / p.44"]
+            - ["本班の構想発表資料", "p.4"]
+            - ["「自然言語処理システム特論」実験課題用サンプルコーパス公開（配布資料）", "コーパスの説明（青空文庫の 30 作品）"]
+          widths: [0.55, 0.45]
+          size: 15
+    footnotes: []
+    notes:
+      time: 15 秒
+      points:
+        - 参考文献の一覧（044 で方針の記述を外し，文献の一覧だけにした）．
+        - 口頭の補足（スライドには書かない）：数式・手法の出典は講義資料の回・頁，講義資料にない設計は各スライドの下部に「独自設計」と記載．外部文献は引用しない．
+      runs: []
+    num_sources: ["storyline:Slide 24", "storyline#出典一覧の掲載内容"]
+
+  # ------------------------------------------------------------------ 補助スライド（質疑用）
+
+  - id: "S1"
+    kind: supp
+    section: 補助
+    title: S1：Jaccard / Dice を使わない理由
+    question: "なぜ Jaccard / Dice 係数を使わないのか"
+    qa: "Q10"
+    supplements: 4
+    claim: 頻度の高い付属語はほぼ全チャンクに出現し，語の有無を見る Jaccard / Dice では区別できない
+    layout: single
+    body:
+      - table:
+          header: ["$L$", 付属語の次元数, 出現率上位 10 語の出現率, "出現率 0.9 以上の次元数"]
+          rows:
+            - ["100", "275", "0.663～0.964", "4"]
+            - ["500", "275", "0.984～1.000", "11"]
+            - ["1000", "275", "0.998～1.000", "14"]
+          widths: [0.13, 0.24, 0.33, 0.30]
+          size: 15
+      - text: "B の語ブロック各次元のチャンク出現率（記述統計，評価には不使用）[^1]"
         muted: true
       - bullets:
-          - "MAP の差は語彙選択しだいで動き，単独の根拠にはしない"
-          - "語彙選択に使うのは fold の Train と作家ラベルのみ（Test の情報は使わない）"
-        size: 16
-    footnotes: [独自設計]
+          - "Jaccard 係数は語の有無のみを見る[^2]"
+          - "手がかりは「どれだけ使うか」の頻度の差"
+          - "頻度を重みにできるコサイン係数を用いる[^3]"
+        size: 18
+    footnotes:
+      - 独自設計
+      - 第 2 回 p.45，第 3 回 p.33
+      - 第 5 回 p.25，第 5 回 p.26
     notes:
       time: 質疑で表示
       points:
-        - 作家別正解率の平均の差は語彙選択を変えても付属語が上．作家別 MAP の平均の差は語彙選択しだいで動き，単独の根拠にはしない．
-        - 1 作家のみの語を除外すると内容語の作家別正解率の平均が上がる（L = 500：0.338 → 0.439，L = 1000：0.350 → 0.465）．付属語はほぼ不変（L = 500：0.524 → 0.524）．
-        - 条件名（run の cond）：主結果 = bal，間引きなし = nobal，語彙選択のみ全件 = fitfull_poolbal，検索対象のみ全件 = fitbal_poolfull，1 作家のみの語を除外 = drop_single_author．
-      runs: [sensitivity_029_L100，sensitivity_029_L500，sensitivity_029_L1000（028，029）]
-    num_sources: ["storyline:S1", "storyline#語彙選択に対する感度"]
+        - 頻度の高い付属語はほぼ全チャンクに出現するため，語の有無だけを見る Jaccard / Dice では作家を区別できない．
+        - 構想発表 p.4 の「入力文章と各人物の特徴をコサイン類似度で比較」と一致．
+      runs: [verify_qa_points]
+    num_sources: ["storyline:S1", "qa#Q10．"]
+
 
   - id: "S2"
     kind: supp
     section: 補助
-    title: S2：作品ごとの一貫性（寺田寅彦の例外）
-    question: "追加質問「寺田寅彦だけ逆なのはなぜか」"
-    claim: MAP で付属語が上回るのは各 L で 9 作品中 7 作品．例外は寺田寅彦の 2 作品
-    layout: single
-    body:
-      - table:
-          header: [作品, "L = 100", "L = 500", "L = 1000"]
-          rows:
-            - [映画芸術, "−0.062", "−0.150", "−0.213"]
-            - [柿の種, "−0.010", "−0.035", "−0.068"]
-          widths: [0.34, 0.22, 0.22, 0.22]
-          size: 18
-      - text: "作品間分割，間引きあり，語ブロック単独．作品ごとの MAP の差（付属語 − 内容語）[^1]"
-        muted: true
-      - bullets:
-          - "寺田寅彦の 2 作品は随筆で作品間の題材が近い"
-          - "内容語も作品をまたいで共有される可能性（仮説）"
-          - "9 作品のため作品ごとの差の検定はしない"
-        size: 18
-    footnotes: [独自設計]
-    notes:
-      time: 質疑で表示
-      points:
-        - 寺田寅彦の 2 作品は随筆で作品間の題材が近く，内容語も作品をまたいで共有される可能性（仮説）．
-        - 9 作品のため作品ごとの差の検定はしない．
-      runs: [full_006（table_core_per_work.csv）]
-    num_sources: ["storyline:S2", "qa#寺田寅彦だけ逆なのはなぜか"]
-
-  - id: "S3"
-    kind: supp
-    section: 補助
-    title: S3：作家ごとに偏りのある付属語
-    question: "追加質問「付属語の何が作家ごとに違うのか」，Q14"
-    claim: 講義が捨てた付属語の中にも，作家ごとに使用頻度が数倍異なり，作品をまたいで同じ側に偏る語がある
-    layout: single
-    body:
-      - table:
-          header: [作家, "他の 3 作家より多い（比）", "他の 3 作家より少ない（比）"]
-          rows:
-            - [夏目漱石, "ちゃ 7.48 / なくっ 4.73 / てる 4.55 / へ 4.38", "ッて 0.00 / ねえ 0.05 / やら 0.12 / ぬ 0.21"]
-            - [太宰治, "だっ 4.87 / でしょう 3.36 / ます 2.79 / くらい 2.65", "ぐらい 0.00 / なくっ 0.00 / ッて 0.00 / てる 0.13"]
-            - [寺田寅彦, "れる 4.69 / る 3.44 / べき 2.57 / られる 1.82", "出現 0 の 8 語（ちゃ・てる・でし・でしょう等）"]
-            - [田山花袋, "やら 3.49 / ぬ 3.46 / たり 2.53 / さ 2.32", "たら 0.19 / わ 0.19 / だけ 0.22 / へ 0.24"]
-          widths: [0.14, 0.45, 0.41]
-          size: 13
-      - text: "比 r_{a}(w) = f_{a}(w) / f_{¬a}(w)．f_{¬a} は他の 3 作家の相対頻度の単純平均．4 作家合計 100 回以上の語のみ[^1][^2]"
-        muted: true
-      - bullets:
-          - "例：太宰の敬体「ます」「でしょう」"
-          - "例：寺田の「れる」「べき」"
-          - "評価には使わない記述統計．識別に効いた次元の特定ではない"
-        size: 16
-    footnotes:
-      - 第 2 回 p.11，第 5 回 p.12
-      - 独自設計
-    notes:
-      time: 質疑で表示
-      points:
-        - 講義が捨てた付属語の中にも，作家ごとに使用頻度が数倍異なり，作品をまたいで同じ側に偏る語がある（例：太宰の敬体「ます」「でしょう」，寺田の「れる」「べき」）．
-        - 作家のすべての作品で作品単位の比が 1 より大（またはすべて 1 より小）の語のみ．全作品を使うため Train / Test の区別がなく，評価には使わない．
-        - 品詞遷移の個別の例は集計していない．作品別の付属語頻度上位は補助 S4．
-      runs: [function_word_profiles（030）]
-    num_sources: ["storyline:S3", "storyline#作家ごとに偏りのある付属語"]
-
-  - id: "S4"
-    kind: supp
-    section: 補助
-    title: S4：講義の頻度上位語と本コーパスの付属語
-    question: "Q14"
-    claim: 本コーパスの『坊っちゃん』でも上位の付属語の顔ぶれは講義と一致，順位は異なる
-    layout: split
-    ratio: 0.42
-    left:
-      - text: "講義の『坊っちゃん』の例"
-      - bullets:
-          - "頻度上位：て・だ・た・は・を・の・に・が・と…[^1]"
-          - "助詞・助動詞などを除いた上位：する・おれ・云う…[^2]"
-          - "tf・idf 順の上位：山嵐・シャツ・おれ・云う・古賀…[^3]"
-          - "「云う」は C では語彙素「言う」に統一（462 件中 458 件）"
-        size: 15
-    right:
-      - table:
-          header: [作品, 付属語の出現回数の上位]
-          rows:
-            - [坊っちゃん, "て 2245 / の 2202 / に 1752 / と 1742 / は 1731\nが 1708 / た 1657 / を 1655 / だ 1154 / で 1075"]
-            - [こころ, "の 5984 / た 5435 / に 4545 / は 4177 / て 3857\n… / です 1132 / まし 1032"]
-            - [三四郎, "の 4689 / て 4211 / た 4096 / に 3786 / は 3469"]
-          widths: [0.22, 0.78]
-          size: 13
-      - text: "本コーパスでの確認（文単位の解析）[^4]"
-        muted: true
-      - bullets:
-          - "講義で 2 位の「だ」が本コーパスの付属語では 9 位"
-          - "『こころ』は「です」「まし」が上位"
-        size: 15
-    footnotes:
-      - 第 5 回 p.14
-      - 第 5 回 p.15
-      - 第 5 回 p.16
-      - 独自設計
-    notes:
-      time: 質疑で表示
-      points:
-        - 第 5 回 p.11 は助詞・助動詞を不要語として索引語から捨て，p.14-16 では捨てた後に題材語（山嵐・シャツ）が浮かび上がることを示した．
-        - 内容（何を書いたか）は作品ごとに変わるが，付属語の使い方（どう書いたか）は作品が変わっても残るはず，という仮説の背景．
-        - 「云う」の統一：『坊っちゃん』の「云」始まりの動詞 462 件中 458 件が言う，残りは「云い捨てる」等の複合動詞（verify_word_tfidf.py）．全 9 作品の上位 12 語は qa の Q14．
-      runs: [verify_qa_points，verify_word_tfidf.py]
-    num_sources: ["storyline:S4"]
-
-  - id: "S5"
-    kind: supp
-    section: 補助
-    title: S5：推論方式の比較
-    question: "Q11"
-    claim: 重心法は間引きの有無によらず安定しており，代表条件とする
+    title: S2：推論方式の比較
+    question: "重心法と k-NN 法のどちらが良かったか"
+    qa: "Q11"
+    supplements: 4
+    claim: 間引きなしではどの特徴量でも重心法が上回り，間引きありでは差が小さいため，重心法を代表とする
     layout: split
     ratio: 0.64
     left:
       - figure: figures/classifier_comparison.png
         h: 3.4
-      - text: "作家別正解率の平均，作品間分割，L = 500．点線は基準値 0.25[^1][^2]"
+      - text: "作家別正解率の平均，作品間分割，$L = 500$．点線は基準値 0.25[^1][^2]"
         muted: true
     right:
       - bullets:
-          - "事前の仮説：似た上位 k 個との平均の方が判別しやすい"
           - "間引きありでは差は小さい（B：重心法 0.581，作家別上位 20 平均 0.599）"
-          - "間引きなしでは作家別上位 k 平均が大きく下がる（B：重心法 0.577，作家別上位 5 平均 0.408）"
-          - "作家別上位 k 平均の優位は Train の作家構成に左右され，仮説は支持されない"
-          - "同点件数は本採用の全条件で 0"
+          - "間引きなしでは作家別上位 $k$ 平均が大きく下がる（B：重心法 0.577，作家別上位 5 平均 0.408）"
+          - "作家別上位 $k$ 平均の優位は Train の作家構成に左右される"
         size: 15
     footnotes:
       - 第 2 回 p.48，第 5 回 p.25
@@ -1065,183 +1103,29 @@ slides:
     notes:
       time: 質疑で表示
       points:
-        - 重心法は間引きの有無によらず安定しており，代表条件とする．
+        - 間引きなしではどの特徴量でも重心法が上回り（グラフの右），間引きありでは差が小さいため，重心法を代表とする．
+        - 同点件数は本採用の全条件で 0．
         - 作家の全チャンクの平均ベクトル（代表文書）と比べる重心法と，特に似ている上位 k 個のチャンクの平均と比べる作家別上位 k 平均の 2 方式を比較．
-        - 間引きありの作家別 F 値の平均（重心法 / 作家別上位 5）：A 0.486 / 0.471，B 0.544 / 0.556，C 0.332 / 0.324，D 0.283 / 0.259．
-        - MRR（重心法 / 作家別上位 5 / 全体上位 5）：A 0.690 / 0.681 / 0.653，B 0.728 / 0.721 / 0.696，C 0.613 / 0.591 / 0.560，D 0.580 / 0.533 / 0.501（基準値 0.521）．全体上位 k の MRR は上位 k 件外の作家が同点となり低く出る（008）．
       runs: [full_006（グラフ F は plot_slide_figures.py で full_006 の summary.csv から描画）]
-    num_sources: ["storyline:S5", "storyline#推論方式の比較", "storyline:Slide 2"]
+    num_refs:
+      - at: "B：重心法 0.581"
+        refs: ["summary:B|L500|inter|bal|cosine|centroid|mean:balanced_accuracy"]
+      - at: "作家別上位 20 平均 0.599"
+        refs: [null, "summary:B|L500|inter|bal|cosine|knn20_per_author|mean:balanced_accuracy"]
+      - at: "B：重心法 0.577"
+        refs: ["summary:B|L500|inter|nobal|cosine|centroid|mean:balanced_accuracy"]
+      - at: "作家別上位 5 平均 0.408"
+        refs: [null, "summary:B|L500|inter|nobal|cosine|knn5_per_author|mean:balanced_accuracy"]
+    num_sources: ["storyline:S2", "storyline#推論方式の比較", "storyline:Slide 5"]
 
-  - id: "S6"
+  - id: "S3"
     kind: supp
     section: 補助
-    title: S6：チャンク長による推移
-    question: "Q3"
-    claim: 長いほど A・B の作家別 MAP の平均は上がり，C・D は未知作品ではほとんど改善しない
-    layout: split
-    ratio: 0.6
-    left:
-      - figure: figures/chunk_length_curves.png
-        h: 4.35
-      - text: "重心法．実線は間引きあり，破線は間引きなし[^1]"
-        muted: true
-    right:
-      - table:
-          header: [特徴量, "作家別 MAP の平均\nL = 100 / 500 / 1000"]
-          rows:
-            - [A, "0.366 / 0.472 / 0.535"]
-            - [B, "0.314 / 0.420 / 0.492"]
-            - [C, "0.268 / 0.306 / 0.341"]
-            - [D, "0.265 / 0.292 / 0.305"]
-            - [基準値, "0.253 / 0.260 / 0.267"]
-          widths: [0.3, 0.7]
-          size: 13
-      - text: "作品間分割，間引きあり"
-        muted: true
-      - bullets:
-          - "事前の仮説：L = 100 では不安定，500 以上で安定"
-          - "C・D の作家別正解率の平均は 500 → 1000 でほぼ横ばい"
-        size: 14
-    footnotes:
-      - 第 2 回 p.8，独自設計
-    notes:
-      time: 質疑で表示
-      points:
-        - 長いほど A・B の作家別 MAP の平均は上がり，C・D は文字数を増やしても未知作品ではほとんど改善しない．
-        - 結果は全特徴量で L = 100 → 500 で作家別 MAP の平均が上がり，A・B は 500 → 1000 でもさらに上がる（B：0.314 → 0.420 → 0.492）．
-        - C・D の作家別正解率の平均は 500 → 1000 でほぼ横ばい（C 0.342 → 0.332，D 0.296 → 0.281）．L = 100 の実測は 125.8 ± 33.1 字．
-      runs: [full_006]
-    num_sources: ["storyline:S6", "storyline#チャンク長別の推移"]
-
-  - id: "S7"
-    kind: supp
-    section: 補助
-    title: S7：最良条件の混同行列と誤判別
-    question: "Q12，Q11"
-    claim: 最も多い誤りは漱石 → 花袋
-    layout: split
-    ratio: 0.5
-    left:
-      - figure: figures/confusion_best.png
-        h: 3.9
-      - text: "B・L = 1000・作品間分割・間引きあり・作家別上位 k 平均（k = 10）．全 5 シードの合算[^1]"
-        muted: true
-    right:
-      - bullets:
-          - text: "最良条件は Test の結果から選んだ楽観的な上限"
-            sub:
-              - "作家別正解率の平均 0.676 ± 0.009"
-              - "作家別 MAP の平均 0.492 ± 0.002"
-          - "漱石の作家別正解率 0.367（2035 件中 1145 件が花袋）"
-          - "代表条件（B，L = 500，重心法）でも漱石の 45.0% が花袋"
-          - "原因の候補：漱石の 3 作品の多様性と花袋の作品との近さ（仮説）"
-          - "同点は誤判別として集計．本採用の全条件で 0 件[^1]"
-        size: 15
-    footnotes:
-      - 独自設計，第 5 回 p.28-29
-    notes:
-      time: 質疑で表示
-      points:
-        - 最良条件は Test の結果から選んでいるため楽観的な上限であり，汎化性能の推定ではない（作家別正解率の平均 0.676 ± 0.009，作家別 F 値の平均 0.634 ± 0.011，MRR 0.773 ± 0.009，作家別 MAP の平均 0.492 ± 0.002）．
-        - 最良条件で漱石の作家別正解率 0.367（漱石 2035 件中 1145 件が花袋），花袋の適合率 0.382．代表条件でも漱石 4005 件中 1803 件（45.0%）が花袋．
-        - Inter-work では Test 作家だけ Train の作品が 1 つ少ない（015）．
-        - アブレーションの一部の k-NN では同点 0.2～4.0 件．ゼロベクトルの照会は全条件で 0 件．
-        - 誤判別チャンクの抜粋は outputs/full_006/misclassified_best.md．run の条件名は B|L1000|inter|bal|cosine|knn10_per_author．
-      runs: [full_006]
-    num_sources: ["storyline:S7"]
-
-  - id: "S8"
-    kind: supp
-    section: 補助
-    title: S8：類似度の分布と作家間ヒートマップ
-    question: "Q12，追加質問「A の方が B より高いのではないか」"
-    claim: 対角成分が行の最大になるのは A～D のいずれも 4 作家中 3 作家
-    layout: split
-    ratio: 0.72
-    left:
-      - columns:
-          ratio: 0.5
-          left:
-            - figures:
-                paths:
-                  - figures/heatmap_A_L500_inter_bal_cosine.png
-                  - figures/heatmap_B_L500_inter_bal_cosine.png
-                  - figures/heatmap_C_L500_inter_bal_cosine.png
-                  - figures/heatmap_D_L500_inter_bal_cosine.png
-                cols: 2
-                h: 4.0
-          right:
-            - figures:
-                paths:
-                  - figures/dist_A_L500_inter_bal_cosine.png
-                  - figures/dist_B_L500_inter_bal_cosine.png
-                  - figures/dist_C_L500_inter_bal_cosine.png
-                  - figures/dist_D_L500_inter_bal_cosine.png
-                cols: 1
-                h: 4.0
-      - text: "左：4×4 作家間平均類似度（A～D）．右：同一著者ペアと異著者ペアの類似度分布（A～D）．作品間分割・L = 500・間引きあり[^1]"
-        muted: true
-    right:
-      - bullets:
-          - text: "A・B の例外は漱石"
-            sub:
-              - "A：花袋 0.626 > 漱石 0.602"
-              - "B：花袋 0.860 > 漱石 0.854"
-          - text: "C・D の例外は太宰"
-            sub:
-              - "C：漱石 0.0402 > 太宰 0.0326"
-              - "D：漱石 0.111 > 太宰 0.073"
-          - "ΔS は特徴量間では比べない"
-        size: 14
-    footnotes: [独自設計]
-    notes:
-      time: 質疑で表示
-      points:
-        - A・B でも漱石の照会チャンクは漱石より花袋の Train チャンクに近い．
-        - C・D では太宰の照会チャンクは太宰より漱石の Train チャンクに近い．値は全 5 シード合算．
-        - ΔS は特徴量ごとに値の分布が異なるため，特徴量間では比べない．B の内容語対照の分布図は出力していないため載せない．
-      runs: [full_006]
-    num_sources: ["storyline:S8"]
-
-  - id: "S9"
-    kind: supp
-    section: 補助
-    title: S9：作品除外（漱石の作品の影響）
-    question: "追加質問「漱石への偏りと重心の割り増しは結果を歪めていないか」"
-    claim: 漱石の作品を 1 つ除くと作家別正解率の平均は ±0.05 程度動くが，大小関係は覆らない
-    layout: single
-    body:
-      - table:
-          header: [除外した作品, 作家別正解率の平均の変化]
-          rows:
-            - [坊っちゃん, "−0.054"]
-            - [こころ, "+0.053"]
-            - [三四郎, "−0.033"]
-          widths: [0.5, 0.5]
-          size: 18
-      - text: "B・重心法・L = 500・間引きあり．8 作品版 − 9 作品版[^1]"
-        muted: true
-      - bullets:
-          - text: "A～D・全 L・重心法と作家別上位 5 平均での変化"
-            sub:
-              - "作家別正解率の平均：−0.075～+0.055"
-              - "作家別 MAP の平均：−0.017～+0.025"
-          - "特徴量間・付属語と内容語の大小関係を覆す大きさではない"
-        size: 18
-    footnotes: [独自設計]
-    notes:
-      time: 質疑で表示
-      points:
-        - 作品除外による変動は作家別正解率の平均で ±0.05 程度（B）．Train に残る漱石の作品によって結果は動くが，付属語と内容語・特徴量間の大小関係を覆す大きさではない（Q5 の差は 0.1 以上）．
-      runs: [exclusion_summary_ABCD（013～015，027）]
-    num_sources: ["storyline:S9", "qa#漱石への偏りと重心の割り増しは結果を歪めていないか"]
-
-  - id: "S10"
-    kind: supp
-    section: 補助
-    title: S10：重心の割り増し係数
-    question: "追加質問「漱石への偏りと重心の割り増しは結果を歪めていないか」，Q11"
-    claim: 重心とのコサインは作家内平均類似度が小さい作家ほど割り増される
+    title: S3：重心の割り増し係数
+    question: "重心の割り増しは結果を歪めていないか"
+    qa: "追加質問「漱石への偏りと重心の割り増しは結果を歪めていないか」・Q11"
+    supplements: 4
+    claim: A・B では割り増しの作家間の差が小さく影響は小さい．C・D では差が残る（影響は未検証）
     layout: split
     ratio: 0.45
     left:
@@ -1254,98 +1138,236 @@ slides:
             - [D, "0.92～1.43"]
           widths: [0.35, 0.65]
           size: 18
-      - text: "漱石 / Test 作家．fold 単位・L = 500・間引きあり[^1]"
+      - text: "漱石 / Test 作家．fold 単位・$L = 500$・間引きあり[^1]"
         muted: true
     right:
       - bullets:
-          - "作家別平均類似度 = ‖ĉ_{a}‖ cos(q, ĉ_{a})"
-          - "ĉ_{a}：長さ 1 に正規化した Train ベクトルの平均"
-          - "重心とのコサインは 1 / ‖ĉ_{a}‖ で割り増される"
+          - '$\frac{1}{|D_a|} \sum_{d \in D_a} \cos(\vec{q}, \vec{d}) = \lVert \hat{c}_a \rVert \cos(\vec{q}, \hat{c}_a)$'
+          - '左辺は作家 $a$ の Train チャンクとの平均類似度（作家別平均類似度）'
+          - '$\hat{c}_a$：長さ 1 に正規化した Train ベクトルの平均'
+          - '重心とのコサインは，作家別平均類似度を $\lVert \hat{c}_a \rVert$ で割った値（割り増し）'
+          - "作家内平均類似度が小さい作家ほど割り増される"
           - "A・B では作家間でほぼ同じで影響は小さい"
-          - "C・D では差が残る（C・D の低さの一部はこの偏りによる可能性，仮説）"
+          - "C・D では差が残る（C・D の低さの一部はこの偏りによる可能性，未検証）"
         size: 16
     footnotes: [独自設計]
     notes:
       time: 質疑で表示
       points:
-        - 重心とのコサインは作家内平均類似度が小さい作家ほど割り増される．A・B では作家間でほぼ同じで影響は小さく，C・D では差が残る（C・D の低さの一部はこの偏りによる可能性，仮説）．
+        - 重心とのコサインは作家内平均類似度が小さい作家ほど割り増される．A・B では作家間でほぼ同じで影響は小さく，C・D では差が残る（C・D の低さの一部はこの偏りによる可能性，未検証）．
         - 作家別平均類似度と重心とのコサインの関係は qa の Q11 の式（最大絶対誤差 3.1 × 10 の −10 乗で確認）．D の最大は lowo_terada_0．
       runs: [centroid_norm_ABCD（015，027）]
-    num_sources: ["storyline:S10", "qa#漱石への偏りと重心の割り増しは結果を歪めていないか", "qa#Q11．"]
+    num_sources: ["storyline:S3", "qa#漱石への偏りと重心の割り増しは結果を歪めていないか", "qa#Q11．"]
 
-  - id: "S11"
+  - id: "S4"
     kind: supp
     section: 補助
-    title: S11：間引きの有無（漱石への予測の集中）
-    question: "追加質問「なぜ Train を間引くのか」"
-    claim: 間引きなしでは漱石以外のチャンクの 58% が漱石と予測され，間引きで 35% に下がる
+    title: S4：指標を 2 つに絞った理由
+    question: "なぜ作家別 F 値の平均や MRR を使わないのか"
+    qa: "追加質問「なぜ作家別 F 値の平均や MRR を使わないのか」"
+    supplements: 5
+    extra_metrics: true
+    claim: F 値は Test の作家構成に，MRR は推論方式に左右されるため，MAP と作家別正解率の平均で測る
+    layout: single
+    body:
+      - bullets:
+          - "作家別 MAP の平均：類似度の順位だけで決まり，推論方式と類似度の値の範囲によらず特徴量を比べられる[^1]"
+          - "作家別正解率の平均：判定そのものの成績．作家別の単純平均で，Test の作家構成によらない（基準値 0.25）[^2]"
+          - "作家別 F 値の平均：適合率が Test の作家構成に左右される（基準値も構成比で変わる：0.233）[^3]"
+          - "MRR：候補が 4 作家で順位が 4 段階と粗く，推論方式によって値が変わる（基準値 0.521）[^4]"
+          - "参考：A・B が C・D を上回り，全特徴量が基準値を上回る点は 4 指標で共通[^5]"
+        size: 17
+      - text: "作家別 F 値の平均・MRR の定義と基準値の導出は補助 S5"
+        muted: true
+    footnotes:
+      - 第 5 回 p.31 を参考にした独自設計
+      - 第 5 回 p.28，第 6 回 p.44，独自設計
+      - 第 5 回 p.28-29，独自設計
+      - 第 5 回 p.31，独自設計
+      - 独自設計
+    notes:
+      time: 質疑で表示
+      points:
+        - 作家別 MAP の平均は類似度の順位だけで決まり，推論方式と類似度の値の範囲（例：C は 0.02～0.06 に集中）によらず特徴量を比べられる．
+        - 作家別正解率の平均は判定そのものの成績．作家別の単純平均のため Test の作家構成（L = 500 の作品間分割で漱石が約半数）によらず，基準値は 0.25．
+        - 作家別 F 値の平均は適合率が Test の作家構成に左右され，基準値も構成比で変わる（L = 500 の作品間分割で 0.233）．
+        - MRR は候補が 4 作家で順位が 4 段階と粗い．推論方式によって値が変わる：全体上位 k の重み付き投票では上位 k 件外の作家が同点となり低く出る（008）．基準値は 0.521．
+        - 4 指標の値（作品間分割，L = 500，重心法，間引きあり，作家別 MAP の平均 / 作家別正解率の平均 / 作家別 F 値の平均 / MRR）：A 0.4720 / 0.5431 / 0.4856 / 0.6903，B 0.4200 / 0.5809 / 0.5441 / 0.7279，C 0.3060 / 0.3418 / 0.3315 / 0.6133，D 0.2922 / 0.2960 / 0.2833 / 0.5803，基準値 0.260 / 0.25 / 0.233 / 0.521．
+        - F 値・MRR の順位は作家別正解率の平均と同じ（B > A > C > D），MAP のみ A > B．A・B が C・D を上回り，全特徴量が基準値を上回る点は 4 指標で共通．
+      runs: [full_006（summary.csv の map_macro・balanced_accuracy・macro_f1・mrr 列），global の MRR は 008]
+    num_sources: ["storyline:S4", "storyline#評価データ（指標・図表）」の定義", "qa#なぜ作家別 F 値の平均や MRR を使わないのか"]
+
+  - id: "S5"
+    kind: supp
+    section: 補助
+    title: S5：基準値の根拠
+    question: "各指標の基準値はどう求めたのか"
+    qa: "追加質問「なぜ普通の正解率を使わないのか」「結果を見てから指標を変えたのではないか」"
+    supplements: 5
+    extra_metrics: true
+    claim: 基準値は，特徴量を使わない一様ランダムな予測・並びで各指標が取る期待値
+    layout: split
+    ratio: 0.52
+    left:
+      - deflist:
+          rows:
+            - ["作家別 F 値の平均", ['$\frac{1}{4} \sum_{a} \frac{2 \, \text{Prec}_a \, \text{Rec}_a}{\text{Prec}_a + \text{Rec}_a}$[^3]', "作家 $a$ を検索対象とみなした適合率・再現率から求める", '基準値（一様ランダムな予測）', '$F_a = \frac{2 \cdot p_a \cdot 1/4}{p_a + 1/4}$', '$p_a$：作家 $a$ の Test 構成比（一様ランダムな予測の適合率の期待値）', "再現率は 1 / 4．4 作家で単純平均（$L = 500$ の作品間分割で 0.233）"]]
+            - ["MRR", ['$\frac{1}{|Q|} \sum_{q \in Q} \frac{1}{\text{rank}_q}$[^2]', '$\text{rank}_q$：4 作家を類似度の降順に並べたときの正解の作家の順位', '基準値（一様ランダムな並び）', '$\frac{1}{4} \left( 1 + \frac{1}{2} + \frac{1}{3} + \frac{1}{4} \right) \approx 0.521$', "4 作家を一様ランダムに並べたときの逆順位の期待値"]]
+          widths: [0.3, 0.7]
+          size: 12
+    right:
+      - deflist:
+          rows:
+            - ["作家別正解率の平均", ["全件を 1 作家と予測：その作家 1，他の 3 作家 0 で平均 0.25[^1]", "一様ランダムな予測：どの作家も再現率の期待値は 1 / 4"]]
+            - ["作家別 MAP の平均", ['$\mathbb{E}[\text{AP}] = \frac{1}{N} \left( H_N + \frac{R - 1}{N - 1} (N - H_N) \right)$', '$H_N = \sum_{k=1}^{N} \frac{1}{k}$', 'Train $N$ 件（適合 $R$ 件）を一様ランダムに並べたときの期待値[^1]']]
+            - ["導出の要点", ['$\mathbb{E}[P@k \mid k] = \frac{1}{k} + \frac{R - 1}{N - 1} \left( 1 - \frac{1}{k} \right)$', "適合文書 1 件が $k$ 位にあるときの上位 $k$ 件の適合率の期待値", '$k$ は $1, \dots, N$ に一様なので，$k$ について平均すると上の式']]
+            - ["間引きあり", ['$R = n_{\min}, \; N = 4 n_{\min}$（作家間で共通）', '$N = 100$ で約 0.282，$N = 708$ で約 0.257']]
+          widths: [0.27, 0.73]
+          size: 12
+    footnotes:
+      - 独自設計
+      - 第 5 回 p.31
+      - 第 5 回 p.28-29
+    notes:
+      time: 質疑で表示
+      points:
+        - 基準値は，特徴量を使わない一様ランダムな予測・並びで各指標が取る期待値（すべて独自に算出，2026-11-18 に決定）．
+        - 作家別 F 値の平均と MRR は本編・他の補助スライドでは使わない．定義と基準値は，指標を 2 つに絞った理由（補助 S4）の説明に必要な範囲でここに残す（044）．
+        - 作家別正解率の平均は Test の作家構成によらず 0.25．全件を漱石と予測しても 0.25（Slide 5 の図）．
+        - 作家別 F 値の平均は Test の作家構成で変わる（L = 500 の作品間分割で 0.233）．
+        - AP の期待値は，適合文書ごとの P@k の平均である AP の性質から，適合文書 1 件の P@k の期待値を k について平均して求める．Train の構成（N と R）だけで決まり，特徴量によらない．
+        - 間引きの有無で作家別 MAP の平均の基準値が大きく変わる（L = 500 の Inter-work で 0.260 / 0.157）ため，間引きあり・なしの比較は基準値との差で見る．
+      runs: [full_006（summary.csv の *_random 列）]
+    num_sources: ["storyline:S5", "storyline#評価データ（指標・図表）」の定義", "qa#なぜ普通の正解率を使わないのか", "qa#なぜ Train を間引くのか"]
+  - id: "S6"
+    kind: supp
+    section: 補助
+    title: S6：作品除外（漱石の作品の影響）
+    question: "漱石の作品の構成が変わると結論は変わるか"
+    qa: "追加質問「漱石への偏りと重心の割り増しは結果を歪めていないか」"
+    supplements: 6
+    claim: 漱石の作品を 1 つ除くと作家別正解率の平均は ±0.05 程度動くが，特徴量間の大小関係は覆らない
     layout: single
     body:
       - table:
-          header: [間引き, 漱石以外のチャンク中の漱石予測割合（C）, 作家別 MAP の平均の基準値]
+          header: [除外した作品, 作家別正解率の平均の変化]
           rows:
-            - [あり, "0.351 ± 0.053", "0.260"]
-            - [なし, "0.583", "0.157"]
-          widths: [0.2, 0.45, 0.35]
+            - [坊っちゃん, "−0.054"]
+            - [こころ, "+0.053"]
+            - [三四郎, "−0.033"]
+          widths: [0.5, 0.5]
           size: 18
-      - text: "L = 500・重心法・作品間分割[^1]"
+      - text: "B・重心法・$L = 500$・間引きあり．8 作品版 − 9 作品版[^1]"
         muted: true
       - bullets:
-          - "間引きあり・なしの MAP の比較は基準値との差で見る"
+          - text: "A～D・全 $L$・重心法と作家別上位 5 平均での変化"
+            sub:
+              - "作家別正解率の平均：−0.075～+0.055"
+              - "作家別 MAP の平均：−0.017～+0.025"
+          - "特徴量間の大小関係を覆す大きさではない"
         size: 18
     footnotes: [独自設計]
     notes:
       time: 質疑で表示
       points:
-        - 間引きなしでは漱石以外のチャンクの 58% が漱石と予測され，間引きで 35% に下がる．
-        - 作家別 MAP の平均の基準値は間引きの有無で異なる（L = 500 の Inter-work で 0.260 / 0.157）．
-      runs: [exclusion_summary_ABCD（013～015）]
-    num_sources: ["storyline:S11"]
+        - 作品除外による変動は作家別正解率の平均で ±0.05 程度（B）．Train に残る漱石の作品によって結果は動くが，特徴量間の大小関係を覆す大きさではない（Q5 の差は 0.1 以上）．
+      runs: [exclusion_summary_ABCD（013～015，027）]
+    num_sources: ["storyline:S6", "qa#漱石への偏りと重心の割り増しは結果を歪めていないか"]
 
-  - id: "S12"
+  - id: "S7"
     kind: supp
     section: 補助
-    title: S12：各特徴量のアブレーション
-    question: "Q6・Q7・Q9"
-    claim: どの特徴量でも，既定仕様の選択を変えても特徴量間の大小関係（A・B が C・D を上回る）は変わらない
-    layout: single
-    body:
+    title: S7：チャンク長による推移
+    question: "L = 1000 の方が値が高いのに，なぜ L = 500 を代表とするのか"
+    qa: "Q3"
+    supplements: 7
+    claim: 特徴量の順位はどの $L$ でも同じため，Train に余裕のある $L = 500$ を代表とした
+    layout: split
+    ratio: 0.6
+    left:
+      - figure: figures/chunk_length_slide.png
+        h: 4.3
+      - text: "重心法．実線は間引きあり，破線は間引きなし．黒線は基準値[^1]"
+        muted: true
+    right:
       - table:
-          header: [特徴量, 条件, 作家別 MAP の平均, 作家別正解率の平均]
+          header: [特徴量, "作家別 MAP の平均\n$L = 100 / 500 / 1000$"]
           rows:
-            - [A, 既定, "0.472 ± 0.003", "0.543 ± 0.011"]
-            - [A, Min-Max 正規化, "0.400 ± 0.005", "0.514 ± 0.013"]
-            - [B, 既定, "0.420 ± 0.004", "0.581 ± 0.011"]
-            - [B, 語彙素, "0.415 ± 0.004", "0.573 ± 0.005"]
-            - [B, 品詞 2-gram 単独, "0.406 ± 0.004", "0.564 ± 0.005"]
-            - [D, "既定（K = 32）", "0.292 ± 0.001", "0.296 ± 0.008"]
-            - [D, "Σ_{K}^{−1} を掛けない射影", "0.312 ± 0.003", "0.322 ± 0.013"]
-          widths: [0.14, 0.34, 0.26, 0.26]
-          size: 14
-      - text: "作品間分割・L = 500・重心法・間引きあり[^1]"
+            - [A, "0.366 / 0.472 / 0.535"]
+            - [B, "0.314 / 0.420 / 0.492"]
+            - [C, "0.268 / 0.306 / 0.341"]
+            - [D, "0.265 / 0.292 / 0.305"]
+            - [基準値, "0.253 / 0.260 / 0.267"]
+          widths: [0.3, 0.7]
+          size: 13
+          refs:
+            vars: [A, B, C, D, 基準値]
+            cols: [null, "story:チャンク長別の推移#1|{v}|作家別 MAP の平均 $L = 100 / 500 / 1000$"]
+      - text: "作品間分割，間引きあり"
         muted: true
       - bullets:
-          - "A：Min-Max は作品内分割で最高だが作品間分割で下がる"
-          - "B：表層形と語彙素・拡張の差は小さい"
-          - "D：どの K でも作品間分割は 0.26～0.32[^2]"
-        size: 16
+          - "順位（A > B > C > D）と基準値を上回ることは全 $L$ で同じ"
+          - "$L = 1000$ は作品間分割で間引き後の Train が 1 作家あたり 25 チャンクまで減る fold がある[^1]"
+          - "そのため余裕のある $L = 500$ を代表とした（設計上の判断）"
+        size: 13
     footnotes:
-      - 独自設計
-      - 第 5 回 p.37
+      - 第 2 回 p.8，独自設計
     notes:
       time: 質疑で表示
       points:
-        - どの特徴量でも，既定仕様の選択を変えても特徴量間の大小関係（A・B が C・D を上回る）は変わらない．
-        - A は Slide 8 のグラフ A，B は Slide 11，D は Slide 17 のグラフ D と同じ値．
-      runs: [full_006（010，025）]
-    num_sources: ["storyline:S12", "storyline:Slide 8", "storyline:Slide 11", "storyline#主結果表 3", "storyline#メイン結果表 4", "qa#Q9．"]
+        - 特徴量の順位（作家別 MAP の平均で A > B > C > D）と基準値を上回ることは L = 100, 500, 1000 のすべてで同じ（表の値）．L = 1000 は値が最も高いが，作品間分割では間引き後の Train が 1 作家あたり 25 チャンクまで減る fold があるため，余裕のある L = 500 を代表とした（設計上の判断）．L = 100 は実測の平均 125.8 字と短く値も低い．5 シードの標準偏差は L = 500 と 1000 で大小が特徴量・指標により逆転するため，ばらつきの主張はしない．
+        - 長いほど A・B の作家別 MAP の平均は上がり，C・D は文字数を増やしても未知作品ではほとんど改善しない．
+        - 結果は全特徴量で L = 100 → 500 で作家別 MAP の平均が上がり，A・B は 500 → 1000 でもさらに上がる（B：0.314 → 0.420 → 0.492）．
+        - C・D の作家別正解率の平均は 500 → 1000 でほぼ横ばい（C 0.342 → 0.332，D 0.296 → 0.281）．L = 100 の実測は 125.8 ± 33.1 字．
+      runs: [full_006]
+    num_sources: ["storyline:S7", "storyline#チャンク長別の推移"]
 
-  - id: "S13"
+  - id: "S8"
     kind: supp
     section: 補助
-    title: S13：底本の表記揺れ
-    question: "Q2，追加質問「表記の差は文体か，底本か」"
-    claim: 文字表層を見る A は底本の表記方針を拾っている可能性（仮説）
+    title: S8：間引きの有無（漱石への予測の集中）
+    question: "なぜ Train を間引くのか"
+    qa: "追加質問「なぜ Train を間引くのか」"
+    supplements: 7
+    claim: Train の作家構成の偏りが漱石への予測の集中を生むため（C：漱石以外の 58% → 間引きで 35%）
+    layout: single
+    body:
+      - table:
+          header: [間引き, 漱石以外のチャンク中の漱石予測割合（C）]
+          rows:
+            - [なし, "0.583"]
+            - [あり, "0.351 ± 0.053"]
+          widths: [0.3, 0.7]
+          size: 18
+      - text: "$L = 500$・重心法・作品間分割[^1]"
+        muted: true
+      - bullets:
+          - "間引きなしでは Train の約半数が漱石"
+          - "間引き：Train を作家ごとに最少の作家のチャンク数にそろえる（Test は間引かない）"
+          - "作家別上位 $k$ 平均では，間引かないと判定が大きく崩れる（B の $k = 5$：0.588 → 0.408）"
+        size: 18
+    footnotes: [独自設計]
+    notes:
+      time: 質疑で表示
+      points:
+        - Train の作家構成の偏り（間引きなしでは Train の約半数が漱石）が漱石への予測の集中を生む．C では間引きなしで漱石以外のチャンクの 58% が漱石と予測され，間引きで 35% に下がる．
+        - 作家別上位 k 平均（k = 5）では，間引かないと B の作家別正解率の平均が 0.588 → 0.408 に下がる（補助 S2 のグラフの右）．
+        - B の重心法では漱石予測割合は 0.150 → 0.146 とほぼ変わらない．
+        - 作家別 MAP の平均の基準値は間引きの有無で異なる（L = 500 の Inter-work で 0.260 / 0.157）ため，間引きあり・なしの比較は基準値との差で見る．
+      runs: [exclusion_summary_ABCD（013～015），full_006]
+    num_refs:
+      - at: "0.588 → 0.408"
+        refs: ["summary:B|L500|inter|bal|cosine|knn5_per_author|mean:balanced_accuracy", "summary:B|L500|inter|nobal|cosine|knn5_per_author|mean:balanced_accuracy"]
+    num_sources: ["storyline:S8", "storyline#推論方式の比較", "qa#なぜ Train を間引くのか", "qa#漱石への偏りと重心の割り増しは結果を歪めていないか"]
+
+  - id: "S9"
+    kind: supp
+    section: 補助
+    title: S9：底本の表記揺れ
+    question: "表記の差は文体か，底本か"
+    qa: "Q2・追加質問「表記の差は文体か，底本か」"
+    supplements: 11
+    claim: 今回の実験では分離できていない．文字表層を見る A は底本の表記方針を拾っている可能性がある
     layout: split
     ratio: 0.55
     left:
@@ -1371,6 +1393,7 @@ slides:
           - "副詞「大分 / だいぶ」：『坊っちゃん』20 / 0，『こころ』15 / 0，『三四郎』0 / 40"
           - "C は語彙素で内容語の表記差を吸収．副詞の表記差が効くのは A のみ[^2]"
           - "A の作品間分割の MAP は基準値を大きく上回り，作品の差だけでは説明できない手がかりも含む"
+          - "字種のブロックは既定に含まれない．表記の差は文字 Bi-gram の漢字・かなの違いを通して効く可能性"
           - "どちらの寄与が大きいかは今回の実験では分離していない"
         size: 15
     footnotes:
@@ -1379,42 +1402,376 @@ slides:
     notes:
       time: 質疑で表示
       points:
-        - 文字表層を見る A は底本の表記方針を拾っている可能性（仮説）．
-        - 漢字率：太宰 0.297 / 0.221，花袋 0.348 / 0.289．内容語の表記揺れは Slide 13 の表 C-1．
+        - 文字表層を見る A は底本の表記方針を拾っている可能性がある（未検証）．
+        - 漢字率：太宰 0.297 / 0.221，花袋 0.348 / 0.289．内容語の表記揺れは Slide 16 の表 C-1．
       runs: [verify_qa_points（char_type_ratios），字種構成比の扱いは 002，010]
-    num_sources: ["storyline:S13"]
+    num_sources: ["storyline:S9"]
+
+  - id: "S10"
+    kind: supp
+    section: 補助
+    title: S10：付属語を特徴に使う理由
+    question: "講義で不要語とされる助詞・助動詞をなぜ特徴に使うのか"
+    qa: "Q14"
+    supplements: 12
+    claim: 講義は題材で文書を探すため付属語を捨てるが，著者識別では題材によらない書き方を見るため使う
+    layout: split
+    ratio: 0.42
+    left:
+      - bullets:
+          - "講義（情報検索）：題材（何を書いたか）で文書を探す[^1]"
+          - "どの文書にも現れる助詞・助動詞は題材を区別しないため，不要語として捨てる[^1]"
+          - "捨てた後の上位は山嵐・シャツ等の題材語[^2]"
+          - "著者識別：題材によらない書き方（どう書いたか）を見たい"
+          - "そこで，どのチャンクにも十分な回数現れる付属語を使う"
+          - "結果：B は作品が変わったときの作家別 MAP の平均の低下が全特徴量で最小（Slide 14）"
+        size: 15
+    right:
+      - table:
+          header: [作品, 付属語の出現回数の上位 5 語]
+          rows:
+            - [坊っちゃん, "て 2245 / の 2202 / に 1752 / と 1742 / は 1731"]
+            - [こころ, "の 5984 / た 5435 / に 4545 / は 4177 / て 3857"]
+            - [三四郎, "の 4689 / て 4211 / た 4096 / に 3786 / は 3469"]
+            - [惜別, "の 3700 / に 2431 / て 2275 / は 2018 / を 1469"]
+            - [斜陽, "の 3057 / て 2426 / に 2084 / は 1600 / た 1491"]
+            - [映画芸術, "の 1217 / に 747 / で 530 / て 483 / は 477"]
+            - [柿の種, "の 2901 / に 1806 / て 1586 / が 1243 / た 1228"]
+            - [蒲団, "の 1681 / に 1404 / て 1221 / た 1161 / は 1029"]
+            - [田舎教師, "の 5312 / に 4681 / て 4383 / た 4270 / は 3304"]
+          widths: [0.22, 0.78]
+          size: 11
+      - text: "9 作品とも上位は同じ顔ぶれの付属語で，数百回以上現れる（作品の全文，文単位の解析）[^3]"
+        muted: true
+    footnotes:
+      - 第 5 回 p.11
+      - 第 5 回 p.14-16
+      - 独自設計
+    notes:
+      time: 質疑で表示
+      points:
+        - 講義（第 5 回 p.11）は題材（何を書いたか）で文書を探すため，どの文書にも現れる付属語を不要語として捨てる．p.14-16 では捨てた後に題材語（山嵐・シャツ）が浮かび上がることを示した．
+        - 著者識別では題材によらない書き方（どう書いたか）を見たいので，どのチャンクにも十分な回数現れる付属語を使う．表のとおり 9 作品とも上位は同じ顔ぶれの付属語（の・に・て・た・は等）で，作品・題材によらず数百回以上現れる．
+        - 結果として，B は作品内分割から作品間分割への作家別 MAP の平均の低下が全特徴量で最小（Slide 14）．付属語と内容語を同じ表現で比べた結果は補助 S11．
+        - 全 9 作品の上位 12 語は qa の Q14．
+      runs: [verify_qa_points]
+    num_sources: ["storyline:S10", "qa#Q14．"]
+
+  - id: "S11"
+    kind: supp
+    section: 補助
+    title: S11：付属語と内容語の統制比較
+    question: "講義で不要語とされる付属語は著者識別の手がかりになるか"
+    qa: "Q13・Q14"
+    supplements: 13
+    claim: 作品間分割の判別では付属語が内容語を上回る．MAP の差は小さい
+    layout: split
+    ratio: 0.49
+    left:
+      - figure: figures/core_chunk_length_slide.png
+        h: 4.86
+    right:
+      - table:
+          header: [分割, "$L$", MAP の差, 作家別正解率の平均の差]
+          rows:
+            - [作品間分割, "100", "+0.014", "+0.092"]
+            - [作品間分割, "500", "+0.033", "+0.186"]
+            - [作品間分割, "1000", "+0.049", "+0.219"]
+            - [作品内分割, "500", "−0.070", "−0.217"]
+          widths: [0.26, 0.14, 0.22, 0.38]
+          size: 12
+          refs:
+            vars: [{s: inter, L: "100"}, {s: inter, L: "500"}, {s: inter, L: "1000"}, {s: intra, L: "500"}]
+            cols: [null, null, "summary:B[blocks=words]|L{L}|{s}|bal|cosine|centroid|mean:map_macro - summary:B[blocks=words,target_pos=['名詞', '動詞', '形容詞']]|L{L}|{s}|bal|cosine|centroid|mean:map_macro",
+                   "summary:B[blocks=words]|L{L}|{s}|bal|cosine|centroid|mean:balanced_accuracy - summary:B[blocks=words,target_pos=['名詞', '動詞', '形容詞']]|L{L}|{s}|bal|cosine|centroid|mean:balanced_accuracy"]
+      - text: "差は付属語 − 内容語（語ブロック単独，重心法，間引きあり）[^3]"
+        muted: true
+      - bullets:
+          - "講義が不要語とする付属語（助詞・助動詞）を内容語と入れ替えて比べる（B の語ブロック単独）[^1][^2]"
+          - "作品間分割の判別：付属語が全 $L$ で +0.09～+0.22 上回る"
+          - "作品内分割の判別：内容語が上（−0.20 前後，トピック漏洩と整合）"
+          - "MAP の差は小さい（+0.014～+0.049）"
+          - text: "1 作家にしか出ない語を内容語から除くと（$L = 500$）"
+            sub:
+              - "MAP の差は +0.006"
+              - "作家別正解率の平均の差も +0.186 から +0.085 に縮む（付属語が上のまま）"
+        size: 13
+    footnotes:
+      - 第 5 回 p.11，第 5 回 p.14-16
+      - 第 2 回 p.11，独自設計
+      - 独自設計
+    notes:
+      time: 質疑で表示
+      points:
+        - 同じ表現のまま語の種類だけを替えると，作品間分割の判別では付属語が内容語を上回る（作品内分割では内容語が上）．同一著者の文章を上位に並べる力（MAP）の差は小さい．
+        - 結果 1（作家別正解率の平均）：未知作品（Inter-work）では付属語が全 L・間引きの有無によらず +0.09～+0.22 上回る．同じ作品内（Intra-work）では内容語が上（−0.20 前後）で，内容語の強さはトピック漏洩によるものと整合．
+        - 結果 2（作家別 MAP の平均）：Inter-work（間引きあり）で付属語が上回るが差は小さい（+0.014～+0.049）．間引きなしでは +0.004～+0.008．Train で 1 作家にしか出ない語を内容語から除くと +0.006（L = 500），+0.003（L = 1000）とほぼ消える．同じ操作で作家別正解率の平均の差も +0.186 → +0.085（L = 500）に縮むが，付属語が上のまま．
+        - 結合版で差が小さい理由：品詞 2-gram ブロックが二乗ノルムの 65～95% を占め（025），語ブロックの差が薄まるため．
+        - 寺田寅彦の例外は補助 S13，付属語の具体例は補助 S14，付属語を特徴に使う理由は補助 S10．図 B は青：付属語，赤：内容語，実線：語ブロック，点線：結合（スライド用に文字を大きくして再描画，系列は full_006 の report の図と同じ．044 で作家別 F 値の平均の行を外した）．
+      runs: [full_006（主結果表 3，図 B は plot_slide_figures.py で full_006 の summary.csv から再描画），sensitivity_029_L100，sensitivity_029_L500，sensitivity_029_L1000]
+    num_refs:
+      - at: "MAP の差は小さい（+0.014～+0.049）"
+        refs: ["summary:B[blocks=words]|L100|inter|bal|cosine|centroid|mean:map_macro - summary:B[blocks=words,target_pos=['名詞', '動詞', '形容詞']]|L100|inter|bal|cosine|centroid|mean:map_macro", "summary:B[blocks=words]|L1000|inter|bal|cosine|centroid|mean:map_macro - summary:B[blocks=words,target_pos=['名詞', '動詞', '形容詞']]|L1000|inter|bal|cosine|centroid|mean:map_macro"]
+      - at: "MAP の差は +0.006"
+        refs: ["sens:500:drop_single_author:map_macro"]
+      - at: "+0.186 から +0.085"
+        refs: ["summary:B[blocks=words]|L500|inter|bal|cosine|centroid|mean:balanced_accuracy - summary:B[blocks=words,target_pos=['名詞', '動詞', '形容詞']]|L500|inter|bal|cosine|centroid|mean:balanced_accuracy", "sens:500:drop_single_author:balanced_accuracy"]
+    num_sources: ["storyline:S11", "storyline#主結果表 3", "storyline#語彙選択に対する感度"]
+
+  - id: "S12"
+    kind: supp
+    section: 補助
+    title: S12：語彙選択に対する感度
+    question: "MAP の差が小さいのに付属語が有効と言えるのか"
+    qa: "追加質問「MAP の差が小さいのに付属語が有効と言えるのか」・Q13"
+    supplements: 13
+    claim: 判別（作家別正解率の平均）では，語彙選択を変えても付属語が内容語を上回る
+    layout: single
+    body:
+      - table:
+          header: [条件, 語彙選択, 検索対象・重心, "MAP の差\n$L = 100 / 500 / 1000$", "作家別正解率の平均の差\n$L = 100 / 500 / 1000$"]
+          rows:
+            - ["主結果（間引きあり）", 間引き後の Train, 間引き後の Train, "+0.014 / +0.033 / +0.049", "+0.092 / +0.186 / +0.219"]
+            - ["間引きなし", Train 全件, Train 全件, "+0.004 / +0.004 / +0.008", "+0.097 / +0.196 / +0.215"]
+            - ["語彙選択のみ全件", Train 全件, 間引き後の Train, "+0.001 / +0.006 / +0.015", "+0.090 / +0.178 / +0.211"]
+            - ["検索対象のみ全件", 間引き後の Train, Train 全件, "+0.011 / +0.029 / +0.047", "+0.103 / +0.208 / +0.227"]
+            - ["1 作家のみの語を除外", "間引き後の Train\n（1 作家にしか出ない語を除く）", 間引き後の Train, "+0.005 / +0.006 / +0.003", "+0.038 / +0.085 / +0.104"]
+          widths: [0.18, 0.21, 0.15, 0.23, 0.23]
+          size: 12
+          refs:
+            vars: [bal （主結果）, nobal, fitfull_poolbal, fitbal_poolfull, drop_single_author]
+            cols: [null, null, null, "story:語彙選択に対する感度#1|{v}|作家別 MAP の平均の差 $L = 100 / 500 / 1000$",
+                   "story:語彙選択に対する感度#1|{v}|作家別正解率の平均の差 $L = 100 / 500 / 1000$"]
+      - text: "作品間分割，語ブロック単独，付属語 − 内容語．間引きなし以外は 5 シードの平均[^1]"
+        muted: true
+      - bullets:
+          - "MAP の差は語彙選択しだいで動き，単独の根拠にはしない"
+          - "語彙選択に使うのは fold の Train と作家ラベルのみ（Test の情報は使わない）"
+        size: 16
+    footnotes: [独自設計]
+    notes:
+      time: 質疑で表示
+      points:
+        - 作家別正解率の平均の差は語彙選択を変えても付属語が上．作家別 MAP の平均の差は語彙選択しだいで動き，単独の根拠にはしない．
+        - 1 作家のみの語を除外すると内容語の作家別正解率の平均が上がる（L = 500：0.338 → 0.439，L = 1000：0.350 → 0.465）．付属語はほぼ不変（L = 500：0.524 → 0.524）．
+        - 条件名（run の cond）：主結果 = bal，間引きなし = nobal，語彙選択のみ全件 = fitfull_poolbal，検索対象のみ全件 = fitbal_poolfull，1 作家のみの語を除外 = drop_single_author．
+      runs: [sensitivity_029_L100，sensitivity_029_L500，sensitivity_029_L1000（028，029）]
+    num_sources: ["storyline:S12", "storyline#語彙選択に対する感度"]
+
+  - id: "S13"
+    kind: supp
+    section: 補助
+    title: S13：作品ごとの一貫性（寺田寅彦の例外）
+    question: "寺田寅彦だけ付属語と内容語の大小が逆なのはなぜか"
+    qa: "追加質問「寺田寅彦だけ逆なのはなぜか」"
+    supplements: 13
+    claim: 寺田寅彦の 2 作品は随筆で題材が近く，内容語も作品をまたいで共有される可能性（未検証）
+    layout: single
+    body:
+      - table:
+          header: [作品, "$L = 100$", "$L = 500$", "$L = 1000$"]
+          rows:
+            - [映画芸術, "−0.062", "−0.150", "−0.213"]
+            - [柿の種, "−0.010", "−0.035", "−0.068"]
+          widths: [0.34, 0.22, 0.22, 0.22]
+          size: 18
+          refs:
+            vars: [映画芸術, 柿の種]
+            cols: [null, "per_work:100:{v}:map_micro_function - per_work:100:{v}:map_micro_content",
+                   "per_work:500:{v}:map_micro_function - per_work:500:{v}:map_micro_content",
+                   "per_work:1000:{v}:map_micro_function - per_work:1000:{v}:map_micro_content"]
+      - text: "作品間分割，間引きあり，語ブロック単独．作品ごとの MAP の差（付属語 − 内容語）[^1]"
+        muted: true
+      - bullets:
+          - "MAP で付属語が上回るのは各 $L$ で 9 作品中 7 作品．例外は寺田寅彦の 2 作品"
+          - "寺田寅彦の 2 作品は随筆で作品間の題材が近い"
+          - "9 作品のため作品ごとの差の検定はしない"
+        size: 18
+    footnotes: [独自設計]
+    notes:
+      time: 質疑で表示
+      points:
+        - 寺田寅彦の 2 作品は随筆で作品間の題材が近く，内容語も作品をまたいで共有される可能性（未検証）．MAP で付属語が上回るのは各 L で 9 作品中 7 作品．
+        - 9 作品のため作品ごとの差の検定はしない．
+      runs: [full_006（table_core_per_work.csv）]
+    num_sources: ["storyline:S13", "qa#寺田寅彦だけ逆なのはなぜか"]
 
   - id: "S14"
     kind: supp
     section: 補助
-    title: S14：Jaccard / Dice を使わない理由
-    question: "Q10"
-    claim: 頻度の高い付属語はほぼ全チャンクに出現し，語の有無を見る Jaccard / Dice では区別できない
+    title: S14：作家ごとに偏りのある付属語
+    question: "付属語の何が作家ごとに違うのか"
+    qa: "追加質問「付属語の何が作家ごとに違うのか」・Q14"
+    supplements: 14
+    claim: 作家ごとに使用頻度が数倍異なり，作品をまたいで同じ側に偏る付属語がある
     layout: single
     body:
       - table:
-          header: [L, 付属語の次元数, 出現率上位 10 語の出現率, "出現率 0.9 以上の次元数", 全次元の出現率の中央値]
+          header: [作家, "他の 3 作家より多い（比）", "他の 3 作家より少ない（比）"]
           rows:
-            - ["100", "275", "0.663～0.964", "4", "0.001"]
-            - ["500", "275", "0.984～1.000", "11", "0.006"]
-            - ["1000", "275", "0.998～1.000", "14", "0.011"]
-          widths: [0.1, 0.18, 0.27, 0.22, 0.23]
-          size: 15
-      - text: "B の語ブロック各次元のチャンク出現率（記述統計，評価には不使用）[^1]"
+            - [夏目漱石, "ちゃ 7.48 / なくっ 4.73 / てる 4.55 / へ 4.38", "ッて 0.00 / ねえ 0.05 / やら 0.12 / ぬ 0.21"]
+            - [太宰治, "だっ 4.87 / でしょう 3.36 / ます 2.79 / くらい 2.65", "ぐらい 0.00 / なくっ 0.00 / ッて 0.00 / てる 0.13"]
+            - [寺田寅彦, "れる 4.69 / る 3.44 / べき 2.57 / られる 1.82", "出現 0 の 8 語（ちゃ・てる・でし・でしょう等）"]
+            - [田山花袋, "やら 3.49 / ぬ 3.46 / たり 2.53 / さ 2.32", "たら 0.19 / わ 0.19 / だけ 0.22 / へ 0.24"]
+          widths: [0.14, 0.45, 0.41]
+          size: 13
+          refs:
+            vars: [夏目漱石, 太宰治, 寺田寅彦, 田山花袋]
+            cols: [null, "story:作家ごとに偏りのある付属語#1|{v}|他の 3 作家より多い（ $r_a$ ）", "story:作家ごとに偏りのある付属語#1|{v}|他の 3 作家より少ない（ $r_a$ ）"]
+      - text: '$r_a(w) = f_a(w) / f_{\neg a}(w)$：作家 $a$ の相対頻度 ÷ 他の 3 作家の相対頻度の単純平均．4 作家合計 100 回以上の語のみ[^1][^2]'
         muted: true
       - bullets:
-          - "Jaccard 係数は語の有無のみを見る[^2]"
-          - "手がかりは「どれだけ使うか」の頻度の差"
-          - "頻度を重みにできるコサイン係数を用いる[^3]"
-        size: 18
+          - "例：太宰の敬体「ます」「でしょう」"
+          - "例：寺田の「れる」「べき」"
+          - "評価には使わない記述統計．識別に効いた次元の特定ではない"
+        size: 16
     footnotes:
+      - 第 2 回 p.11，第 5 回 p.12
       - 独自設計
-      - 第 2 回 p.45，第 3 回 p.33
-      - 第 5 回 p.25，第 5 回 p.26
     notes:
       time: 質疑で表示
       points:
-        - 頻度の高い付属語はほぼ全チャンクに出現するため，語の有無だけを見る Jaccard / Dice では作家を区別できない．
-        - 構想発表 p.4 の「入力文章と各人物の特徴をコサイン類似度で比較」と一致．
-      runs: [verify_qa_points]
-    num_sources: ["storyline:S14", "qa#Q10．"]
+        - 講義が捨てた付属語の中にも，作家ごとに使用頻度が数倍異なり，作品をまたいで同じ側に偏る語がある（例：太宰の敬体「ます」「でしょう」，寺田の「れる」「べき」）．
+        - 作家のすべての作品で作品単位の比が 1 より大（またはすべて 1 より小）の語のみ．全作品を使うため Train / Test の区別がなく，評価には使わない．
+        - 品詞遷移の個別の例は集計していない．作品別の付属語頻度上位は補助 S10．
+      runs: [function_word_profiles（030）]
+    num_sources: ["storyline:S14", "storyline#作家ごとに偏りのある付属語"]
+
+  - id: "S15"
+    kind: supp
+    section: 補助
+    title: S15：各特徴量の設定を変えた比較
+    question: "既定の設定を変えると結論は変わるか"
+    qa: "Q6・Q7・Q9"
+    supplements: 21
+    claim: どの特徴量でも，既定仕様の選択を変えても特徴量間の大小関係（A・B が C・D を上回る）は変わらない
+    layout: single
+    body:
+      - table:
+          header: [特徴量, 条件, 作家別 MAP の平均, 作家別正解率の平均]
+          rows:
+            - [A, 既定, "0.472 ± 0.003", "0.543 ± 0.011"]
+            - [A, Min-Max 正規化, "0.400 ± 0.005", "0.514 ± 0.013"]
+            - [B, 既定, "0.420 ± 0.004", "0.581 ± 0.011"]
+            - [B, 語彙素, "0.415 ± 0.004", "0.573 ± 0.005"]
+            - [B, 品詞 2-gram 単独, "0.406 ± 0.004", "0.564 ± 0.005"]
+            - [D, "既定（$K = 32$）", "0.292 ± 0.001", "0.296 ± 0.008"]
+            - [D, '$\Sigma_K^{-1}$ を掛けない射影', "0.312 ± 0.003", "0.322 ± 0.013"]
+          widths: [0.14, 0.34, 0.26, 0.26]
+          size: 14
+          refs:
+            vars: [A, "A[scaling=minmax]", B, "B[token_key=lemma]", "B[blocks=pos_bigram]", D, "D[projection=us]"]
+            cols: [null, null, "summary:{v}|L500|inter|bal|cosine|centroid|mean:map_macro", "summary:{v}|L500|inter|bal|cosine|centroid|mean:balanced_accuracy"]
+      - text: "作品間分割・$L = 500$・重心法・間引きあり[^1]"
+        muted: true
+      - bullets:
+          - "A：Min-Max は作品内分割で最高だが作品間分割で下がる"
+          - "B：語彙素・品詞 2-gram 単独に変えても差は小さい"
+          - "D：どの $K$ でも作品間分割は 0.26～0.32[^2]"
+        size: 16
+    footnotes:
+      - 独自設計
+      - 第 5 回 p.37
+    notes:
+      time: 質疑で表示
+      points:
+        - どの特徴量でも，既定仕様の選択を変えても特徴量間の大小関係（A・B が C・D を上回る）は変わらない．
+        - A は Slide 11 のグラフ A，B は Slide 14，D は Slide 20 のグラフ D と同じ値．
+      runs: [full_006（010，025）]
+    num_sources: ["storyline:S15", "storyline:Slide 11", "storyline:Slide 14", "storyline#主結果表 3", "storyline#メイン結果表 4", "qa#Q9．"]
+
+  - id: "S16"
+    kind: supp
+    section: 補助
+    title: S16：類似度の分布と作家間ヒートマップ
+    question: "同じ著者の文章同士の類似度は実際に高くなったのか"
+    qa: "Q12"
+    supplements: 21
+    claim: どの特徴量でも，同じ著者のペアの平均類似度は違う著者のペアより高い（作家により例外あり）
+    layout: split
+    ratio: 0.79
+    left:
+      - columns:
+          ratio: 0.55
+          left:
+            - figure: figures/s8_heatmaps.png
+              h: 4.15
+          right:
+            - figure: figures/s8_distributions.png
+              h: 4.15
+      - text: '左：$4 \times 4$ 作家間平均類似度（行：照会作家，列：登録作家）．右：同一著者・異著者ペアの類似度分布．作品間分割・$L = 500$・間引きあり[^1]'
+        muted: true
+        size: 11
+    right:
+      - bullets:
+          - "同じ著者のペアの平均類似度は，A～D・両分割で違う著者のペアより高い"
+          - "4 作家中 3 作家で本人の Train チャンクが最も近い（A～D 共通）"
+          - text: "A・B の例外は漱石"
+            sub:
+              - "A：花袋 0.626 > 漱石 0.602"
+              - "B：花袋 0.860 > 漱石 0.854"
+          - text: "C・D の例外は太宰"
+            sub:
+              - "C：漱石 0.0402 > 太宰 0.0326"
+              - "D：漱石 0.111 > 太宰 0.073"
+        size: 14
+    footnotes: [独自設計]
+    notes:
+      time: 質疑で表示
+      points:
+        - Slide 2 の成功の条件（同じ著者の文章同士なら類似度が高い）への答え．同じ著者のペアの平均類似度は，A～D・全 L・両分割・間引きの有無のすべてで違う著者のペアより高い（作家間行列の対角平均と非対角平均，ペア単位の平均の両方，full_006 の summary.csv で確認）．
+        - ヒートマップの対角成分が行の最大になるのは A～D のいずれも 4 作家中 3 作家．
+        - A・B でも漱石の照会チャンクは漱石より花袋の Train チャンクに近い．
+        - C・D では太宰の照会チャンクは太宰より漱石の Train チャンクに近い．値は全 5 シード合算．
+        - B の内容語対照の分布図は出力していないため載せない．
+        - 図はスライド用に文字を大きくして再描画（描画データは full_006 の similarity_stats.json で，report の heatmap・dist の図と同じ．箱ひげ図は省略）．
+      runs: [full_006]
+    num_refs:
+      - at: "A：花袋 0.626 > 漱石 0.602"
+        refs: ["stats:A|L500|inter|bal|cosine|all:0,3", "stats:A|L500|inter|bal|cosine|all:0,0"]
+      - at: "B：花袋 0.860 > 漱石 0.854"
+        refs: ["stats:B|L500|inter|bal|cosine|all:0,3", "stats:B|L500|inter|bal|cosine|all:0,0"]
+      - at: "C：漱石 0.0402 > 太宰 0.0326"
+        refs: ["stats:C|L500|inter|bal|cosine|all:1,0", "stats:C|L500|inter|bal|cosine|all:1,1"]
+      - at: "D：漱石 0.111 > 太宰 0.073"
+        refs: ["stats:D|L500|inter|bal|cosine|all:1,0", "stats:D|L500|inter|bal|cosine|all:1,1"]
+    num_sources: ["storyline:S16"]
+
+  - id: "S17"
+    kind: supp
+    section: 補助
+    title: S17：最良条件の混同行列と誤判別
+    question: "どの作家を間違えやすいか"
+    qa: "Q12・Q11"
+    supplements: 21
+    claim: 最も多い誤りは漱石 → 花袋
+    layout: split
+    ratio: 0.5
+    left:
+      - figure: figures/confusion_best.png
+        h: 3.9
+      - text: "B・$L = 1000$・作品間分割・間引きあり・作家別上位 $k$ 平均（$k = 10$）．全 5 シードの合算[^1]"
+        muted: true
+    right:
+      - bullets:
+          - "条件は Test の結果から選んだ最良条件（楽観的な上限）"
+          - "漱石の作家別正解率 0.367（2035 件中 1145 件が花袋）"
+          - "代表条件（B，$L = 500$，重心法）でも漱石の 45.0% が花袋"
+          - "原因の候補：漱石の 3 作品の多様性と花袋の作品との近さ（未検証）[^1]"
+        size: 15
+    footnotes:
+      - 独自設計，第 5 回 p.28-29
+    notes:
+      time: 質疑で表示
+      points:
+        - 最良条件は Test の結果から選んでいるため楽観的な上限であり，汎化性能の推定ではない（作家別正解率の平均 0.676 ± 0.009，作家別 MAP の平均 0.492 ± 0.002）．
+        - 最良条件で漱石の作家別正解率 0.367（漱石 2035 件中 1145 件が花袋）．代表条件でも漱石 4005 件中 1803 件（45.0%）が花袋．
+        - Inter-work では Test 作家だけ Train の作品が 1 つ少ない（015）．
+        - 同点は誤判別として集計（本採用の全条件で 0 件）．既定と比べる条件の一部の k-NN では同点 0.2～4.0 件．ゼロベクトルの照会は全条件で 0 件．
+        - 誤判別チャンクの抜粋は outputs/full_006/misclassified_best.md．run の条件名は B|L1000|inter|bal|cosine|knn10_per_author．
+      runs: [full_006]
+    num_refs:
+      - at: "漱石の作家別正解率 0.367"
+        refs: ["summary:B|L1000|inter|bal|cosine|knn10_per_author|mean:author_acc_soseki"]
+    num_sources: ["storyline:S17"]
+
